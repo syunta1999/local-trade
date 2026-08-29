@@ -36,3 +36,22 @@ export type ParsedCsv = {
   /** 解析できずスキップした行数 */
   skipped: number;
 };
+
+/** チャートに重ねるテクニカル指標の設定 */
+export type IndicatorConfig = {
+  /** 表示する移動平均の本数。空なら非表示 */
+  maPeriods: number[];
+  bb: { on: boolean; period: number; sigma: number };
+  rsi: { on: boolean; period: number };
+};
+
+/** インジケーターバーが持つUI状態 */
+export type IndicatorUi = {
+  maOn: boolean;
+  maPeriods: number[];
+  bbOn: boolean;
+  bbPeriod: number;
+  bbSigma: number;
+  rsiOn: boolean;
+  rsiPeriod: number;
+};

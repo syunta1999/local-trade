@@ -47,9 +47,11 @@ export function useReplay(
   ticks: Tick[],
   interval: number,
   sinkRef: React.RefObject<ReplaySink | null>,
+  /** ティックを1本消化するたびに呼ぶ。約定シミュレータの突き合わせ用 */
+  onTickRef?: React.RefObject<((tick: Tick) => void) | null>,
 ) {
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(10);
+  const [speed, setSpeed] = useState(1);
   const [skipGaps, setSkipGaps] = useState(true);
   const [view, setView] = useState<ReplayView>({
     cursor: 0,
@@ -144,8 +146,10 @@ export function useReplay(
       if (tapeRef.current.length > TAPE_ROWS * 2) {
         tapeRef.current.length = TAPE_ROWS;
       }
+
+      onTickRef?.current?.(tick);
     },
-    [sinkRef],
+    [sinkRef, onTickRef],
   );
 
   const stop = useCallback(() => {

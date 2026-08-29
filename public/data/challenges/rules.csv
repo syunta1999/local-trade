@@ -1,0 +1,8 @@
+﻿ID,有効,値
+maxTrades,0,5
+stopLoss,0,20
+maxLot,0,300
+entryCutoff,0,600
+maxDrawdown,0,30000
+loseStreak,0,3
+cooldown,0,60

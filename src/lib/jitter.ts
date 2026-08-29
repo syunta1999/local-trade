@@ -20,7 +20,7 @@ import type { Tick } from './types';
 const BURST = 1.6;
 
 /** 連番の秒でも乱数列が相関しないように32bit整数を撹拌する */
-function hash32(x: number): number {
+export function hash32(x: number): number {
   let h = x | 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
@@ -28,7 +28,7 @@ function hash32(x: number): number {
 }
 
 /** mulberry32 — 種が同じなら必ず同じ列を返す軽量PRNG */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;

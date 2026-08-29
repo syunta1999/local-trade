@@ -3,13 +3,13 @@ import type { Candle, Tick } from './types';
 export type Interval = { label: string; seconds: number };
 
 export const INTERVALS: Interval[] = [
-  { label: '1秒', seconds: 1 },
-  { label: '5秒', seconds: 5 },
-  { label: '15秒', seconds: 15 },
-  { label: '30秒', seconds: 30 },
-  { label: '1分', seconds: 60 },
-  { label: '3分', seconds: 180 },
   { label: '5分', seconds: 300 },
+  { label: '3分', seconds: 180 },
+  { label: '1分', seconds: 60 },
+  { label: '30秒', seconds: 30 },
+  { label: '15秒', seconds: 15 },
+  { label: '5秒', seconds: 5 },
+  { label: '1秒', seconds: 1 },
 ];
 
 export type CandleState = {

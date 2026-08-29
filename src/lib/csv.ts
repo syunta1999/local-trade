@@ -56,7 +56,7 @@ function toNumber(raw: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** ファイル名から日付(8桁)と銘柄コード(4桁)を推定する。例: qr-6330-20260828.csv */
+/** ファイル名から日付(8桁)と銘柄コード(4桁)を推定する。例: default.csv */
 function inferMeta(fileName: string): { symbol: string | null; y: number; m: number; d: number } {
   const tokens = fileName.replace(/\.[^.]+$/, '').split(/[^0-9]+/).filter(Boolean);
   let y = 0;
