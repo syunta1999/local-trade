@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { INTERVALS } from '../lib/candles';
 import { formatClock } from '../lib/csv';
+import type { ReplayEntry } from '../lib/csvfile';
 import type { SoundChannel, SoundPrefs } from '../lib/sound';
 import { swatchOf, THEMES } from '../lib/themes';
 
@@ -38,6 +39,12 @@ type Props = {
   current: string;
   onSelectFile: (name: string) => void;
   onOpenFile: () => void;
+  /** 溜まっているチャレンジ。リプレイで選べるもの */
+  replays: ReplayEntry[];
+  /** いま見ているリプレイ。null なら通常モード */
+  replayOf: ReplayEntry | null;
+  onSelectReplay: (entry: ReplayEntry) => void;
+  onExitReplay: () => void;
   /** フッターを畳む */
   onCollapse: () => void;
   /** 何もないところを押したときも畳む */
@@ -70,6 +77,10 @@ export function Controls({
   current,
   onSelectFile,
   onOpenFile,
+  replays,
+  replayOf,
+  onSelectReplay,
+  onExitReplay,
   onCollapse,
   onBlankClick,
   disabled,
@@ -184,6 +195,12 @@ export function Controls({
           >
             CSVを開く
           </button>
+          <ReplayMenu
+            replays={replays}
+            replayOf={replayOf}
+            onSelect={onSelectReplay}
+            onExit={onExitReplay}
+          />
         </div>
 
         <div className="seek-bar">
@@ -217,6 +234,112 @@ export function Controls({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** ポップアップの閉じ方。外側クリックと Esc は設定でもリプレイでも同じ */
+function useDismiss(open: boolean, close: () => void, box: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, close, box]);
+}
+
+const nf = new Intl.NumberFormat('ja-JP');
+
+/**
+ * チャレンジのリプレイ。溜まった記録から1回を選ぶ。
+ * CSVを開くボタンの隣に置いてあるのは、どちらも「何を再生するか」の選択だから。
+ */
+function ReplayMenu({
+  replays,
+  replayOf,
+  onSelect,
+  onExit,
+}: {
+  replays: ReplayEntry[];
+  replayOf: ReplayEntry | null;
+  onSelect: (entry: ReplayEntry) => void;
+  onExit: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, box);
+
+  return (
+    <div className="rep-menu" ref={box}>
+      <button
+        type="button"
+        className={`btn ghost rep-btn${replayOf ? ' on' : ''}`}
+        onClick={() => (open ? close() : setOpen(true))}
+        title="過去のチャレンジを、そのときの売買ごとチャートで見直す"
+        aria-expanded={open}
+      >
+        ⏱ リプレイ{replayOf ? '中' : ''}
+      </button>
+
+      {open && (
+        <div className="rep-pop">
+          <h4>チャレンジのリプレイ</h4>
+          {replayOf && (
+            <button
+              type="button"
+              className="rep-exit"
+              onClick={() => {
+                onExit();
+                close();
+              }}
+            >
+              リプレイをやめて通常の再生に戻す
+            </button>
+          )}
+          {replays.length === 0 ? (
+            <p className="rep-empty">
+              まだ記録がありません。チャレンジを始めて売買すると、ここに溜まります。
+            </p>
+          ) : (
+            <ul className="rep-list">
+              {replays.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    className={`rep-row${r.id === replayOf?.id ? ' on' : ''}`}
+                    onClick={() => {
+                      onSelect(r);
+                      close();
+                    }}
+                    title={`${r.fileName} を ${r.fromClock} から再生します`}
+                  >
+                    <span className="rep-name">
+                      {r.id}-{r.symbol}-{r.dateLabel}
+                    </span>
+                    <span className="rep-meta">
+                      {r.fromClock}〜{r.toClock} · {r.trades.length}取引
+                      <b className={r.pnl >= 0 ? 'up' : 'down'}>
+                        {r.pnl >= 0 ? '+' : ''}
+                        {nf.format(r.pnl)}
+                      </b>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -256,22 +379,7 @@ function SettingsMenu({
     setFailed(false);
   }, []);
 
-  // 外側をクリックしたら閉じる
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('pointerdown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('pointerdown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open, close]);
+  useDismiss(open, close, box);
 
   const run = async () => {
     setBusy(true);
@@ -315,18 +423,21 @@ function SettingsMenu({
 
           <section className="set-sec">
             <h4>テーマ</h4>
-            {THEMES.map((t) => (
-              <button
-                type="button"
-                key={t.id}
-                className={`theme-row${t.id === theme ? ' on' : ''}`}
-                onClick={() => onTheme(t.id)}
-              >
-                <Swatch id={t.id} />
-                <span className="theme-label">{t.label}</span>
-                {t.id === theme && <span className="theme-now">いま</span>}
-              </button>
-            ))}
+            <div className="theme-list">
+              {THEMES.map((t) => (
+                <button
+                  type="button"
+                  key={t.id}
+                  className={`theme-row${t.id === theme ? ' on' : ''}`}
+                  onClick={() => onTheme(t.id)}
+                  title={t.note}
+                >
+                  <Swatch id={t.id} />
+                  <span className="theme-label">{t.label}</span>
+                  {t.id === theme && <span className="theme-now">いま</span>}
+                </button>
+              ))}
+            </div>
           </section>
 
           <section className="set-sec">

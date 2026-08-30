@@ -299,8 +299,10 @@ export async function deleteChallenge(id: string): Promise<boolean> {
 
 // ---- ゴーストリプレイ ----------------------------------------------------
 
-/** 前回の自分の1トレード。チャートに薄く重ねる用 */
+/** 記録した1トレード。チャートに重ねる用 */
 export type GhostTrade = {
+  /** チャレンジ内の通し番号。リプレイのラベルに出す */
+  id: number;
   side: PositionSide;
   qty: number;
   entryAt: number;
@@ -309,6 +311,20 @@ export type GhostTrade = {
   exit: number;
   pnl: number;
 };
+
+/** trades.csv の1行を、チャートに重ねられる形にする */
+function toGhost(r: Record<string, string>): GhostTrade {
+  return {
+    id: toNum(r['番号']),
+    side: r['方向'] === '売' ? 'short' : 'long',
+    qty: toNum(r['数量']),
+    entryAt: toEpoch(r['日付'], r['建玉時刻']),
+    exitAt: toEpoch(r['日付'], r['返済時刻']),
+    entry: toNum(r['建値']),
+    exit: toNum(r['返済値']),
+    pnl: toNum(r['損益']),
+  };
+}
 
 /**
  * 同じCSVで最後にやったチャレンジの取引を返す。
@@ -333,15 +349,69 @@ export async function loadGhost(fileName: string): Promise<GhostTrade[]> {
 
   return parseCsvRows(files[CHALLENGE_TRADES_FILE] ?? '')
     .filter((r) => r['チャレンジID'] === latest['ID'])
+    .map(toGhost);
+}
+
+// ---- チャレンジのリプレイ ----------------------------------------------
+
+/**
+ * リプレイ1件ぶん。
+ * 一覧に出す見出しと、チャートに重ねる取引をまとめて持つ。
+ */
+export type ReplayEntry = {
+  id: string;
+  symbol: string;
+  dateLabel: string;
+  /** 再生に使うCSV。違うものを見ていたら読み直す */
+  fileName: string;
+  /** セッション内の開始 / 終了時刻 "09:00:00" */
+  fromClock: string;
+  toClock: string;
+  /** 開始時刻をティックと同じ符号化で持ったもの。巻き戻す先を探すのに使う */
+  fromAt: number;
+  pnl: number;
+  trades: GhostTrade[];
+};
+
+/**
+ * 溜まっているチャレンジを、リプレイできる形で新しい順に返す。
+ * 1件も取引していないチャレンジは見るものが無いので落とす。
+ */
+export async function loadReplays(): Promise<ReplayEntry[]> {
+  let files: Record<string, string>;
+  try {
+    const res = await fetch('/api/challenges');
+    if (!res.ok) return [];
+    files = ((await res.json()) as { files?: Record<string, string> }).files ?? {};
+  } catch {
+    return [];
+  }
+
+  // 取引は先にチャレンジIDでまとめておく。件数が増えても走査は1回で済む
+  const byId = new Map<string, GhostTrade[]>();
+  for (const r of parseCsvRows(files[CHALLENGE_TRADES_FILE] ?? '')) {
+    const id = r['チャレンジID'];
+    if (!id) continue;
+    const list = byId.get(id);
+    if (list) list.push(toGhost(r));
+    else byId.set(id, [toGhost(r)]);
+  }
+
+  return parseCsvRows(files[CHALLENGE_FILE] ?? '')
     .map((r) => ({
-      side: (r['方向'] === '売' ? 'short' : 'long') as PositionSide,
-      qty: toNum(r['数量']),
-      entryAt: toEpoch(r['日付'], r['建玉時刻']),
-      exitAt: toEpoch(r['日付'], r['返済時刻']),
-      entry: toNum(r['建値']),
-      exit: toNum(r['返済値']),
-      pnl: toNum(r['損益']),
-    }));
+      id: r['ID'],
+      symbol: r['銘柄'],
+      dateLabel: r['日付'],
+      fileName: r['ファイル'],
+      fromClock: r['開始時刻'],
+      toClock: r['終了時刻'],
+      fromAt: toEpoch(r['日付'], r['開始時刻']),
+      pnl: toNum(r['総損益']),
+      trades: byId.get(r['ID']) ?? [],
+    }))
+    .filter((e) => e.id !== '' && e.fileName !== '' && e.trades.length > 0)
+    // ID は開始時刻(ms)なので、大きいものが直近
+    .sort((a, b) => toNum(b.id) - toNum(a.id));
 }
 
 // ---- 設定の保存（ルール・画面の設定） ------------------------------------

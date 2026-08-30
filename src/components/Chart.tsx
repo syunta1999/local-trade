@@ -44,13 +44,21 @@ type Props = {
   indicators: IndicatorConfig;
   /** 前回の自分の取引。空なら何も出さない */
   ghost: GhostTrade[];
+  /**
+   * リプレイ中のチャレンジの取引。空なら通常モード。
+   * ゴーストより濃く、建値→返済値を線で結んで値段まで書く。
+   */
+  replayTrades: GhostTrade[];
   /** 足の秒数。ゴーストの時刻を足に丸めるのに使う */
   interval: number;
-  /** 配色テーマのid。変わったら色を読み直して塗り直す */
+  /** 配色テーマの鍵。変わったら色を読み直して塗り直す（randomは引き直すたびに変わる） */
   theme: string;
 };
 
-export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
+/** 値段と損益の表示。小数のある呼値でも桁が伸びないように丸める */
+const label = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
+
+export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -67,6 +75,9 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
   const rsiStateRef = useRef<RsiState | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const ghostRef = useRef<GhostTrade[]>(ghost);
+  const replayRef = useRef<GhostTrade[]>(replayTrades);
+  /** リプレイの取引ごとに引く建玉→返済の線。添字は replayRef の位置 */
+  const tradeLinesRef = useRef(new Map<number, Line>());
   const intervalRef = useRef(interval);
 
   /** rAF ループ（レンダーの外）から最新の設定を読むための控え */
@@ -79,6 +90,7 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
     const el = containerRef.current;
     if (!el) return;
     const maSeries = maRef.current;
+    const tradeLines = tradeLinesRef.current;
     refreshPalette();
 
     const chart = createChart(el, {
@@ -140,6 +152,7 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
       volumeRef.current = null;
       markersRef.current = null;
       maSeries.clear();
+      tradeLines.clear();
       bbRef.current = null;
       rsiRef.current = null;
       rsiStateRef.current = null;
@@ -178,17 +191,18 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
   }, [theme]);
 
   /**
-   * 前回のトレードをマーカーで重ねる。
+   * ゴーストとリプレイのトレードをマーカーで重ねる。
    * まだ描かれていない足には打てないので、いま出ている足までに絞る。
+   * リプレイでは先の値動きを見せないためでもある。
    *
    * 対戦botの売買はここには出さない。3体ぶんを同じチャートに重ねると読めなくなるので、
    * botごとのミニチャート（components/BotBoard.tsx）に分けてある。
    */
-  const applyGhost = useCallback(() => {
+  const applyMarks = useCallback(() => {
     const api = markersRef.current;
     if (!api) return;
     const times = barsRef.current.times;
-    const lastBar = times.length ? times[times.length - 1] : 0;
+    const last = times.length ? times[times.length - 1] : 0;
     const iv = intervalRef.current;
     const bucket = (t: number) => Math.floor(t / iv) * iv;
 
@@ -198,7 +212,7 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
       const inTime = bucket(g.entryAt);
       const outTime = bucket(g.exitAt);
       const buy = g.side === 'long';
-      if (inTime <= lastBar) {
+      if (inTime <= last) {
         marks.push({
           time: inTime as UTCTimestamp,
           position: buy ? 'belowBar' : 'aboveBar',
@@ -208,7 +222,7 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
           size: 1,
         });
       }
-      if (outTime <= lastBar) {
+      if (outTime <= last) {
         marks.push({
           time: outTime as UTCTimestamp,
           position: buy ? 'aboveBar' : 'belowBar',
@@ -218,15 +232,98 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
         });
       }
     }
+
+    // リプレイは「いつ・いくらで・どうなったか」を読ませたいので、値段と損益まで書く
+    for (const t of replayRef.current) {
+      const inTime = bucket(t.entryAt);
+      const outTime = bucket(t.exitAt);
+      const buy = t.side === 'long';
+      if (inTime <= last) {
+        marks.push({
+          time: inTime as UTCTimestamp,
+          position: buy ? 'belowBar' : 'aboveBar',
+          shape: buy ? 'arrowUp' : 'arrowDown',
+          color: buy ? C.up : C.down,
+          text: `${t.id} ${buy ? '買' : '売'} ${label(t.entry)}`,
+          size: 1,
+        });
+      }
+      if (outTime <= last) {
+        marks.push({
+          time: outTime as UTCTimestamp,
+          position: buy ? 'aboveBar' : 'belowBar',
+          shape: 'circle',
+          color: t.pnl >= 0 ? C.up : C.down,
+          text: `返 ${label(t.exit)} ${t.pnl >= 0 ? '+' : ''}${label(t.pnl)}`,
+          size: 1,
+        });
+      }
+    }
+
     marks.sort((a, b) => (a.time as number) - (b.time as number));
     api.setMarkers(marks);
   }, []);
 
+  /**
+   * リプレイのトレードを、建値から返済値まで1本の線で結ぶ。
+   * どの値段で入ってどこで降りたかが、マーカーだけより一目で分かる。
+   * 勝ちは赤 / 負けは青（botの売買パネルと同じ読み方）。
+   */
+  const applyTradeLines = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const times = barsRef.current.times;
+    const last = times.length ? times[times.length - 1] : 0;
+    const iv = intervalRef.current;
+    const bucket = (t: number) => Math.floor(t / iv) * iv;
+    const trades = replayRef.current;
+    const lines = tradeLinesRef.current;
+
+    // 巻き戻したときは、まだ来ていない取引の線を片付ける
+    for (const [i, s] of lines) {
+      if (i < trades.length && bucket(trades[i].exitAt) <= last) continue;
+      chart.removeSeries(s);
+      lines.delete(i);
+    }
+
+    for (let i = 0; i < trades.length; i++) {
+      if (lines.has(i)) continue;
+      const t = trades[i];
+      const from = bucket(t.entryAt);
+      const to = bucket(t.exitAt);
+      // 返済の足まで来ていなければ引かない。先の値動きを教えてしまう
+      if (to > last) continue;
+      // 同じ足で建てて返した取引は線にならないので、マーカーだけで示す
+      if (from >= to) continue;
+      const s = chart.addSeries(LineSeries, {
+        color: t.pnl >= 0 ? C.up : C.down,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      s.setData([
+        { time: from as UTCTimestamp, value: t.entry },
+        { time: to as UTCTimestamp, value: t.exit },
+      ]);
+      lines.set(i, s);
+    }
+  }, []);
+
   useEffect(() => {
     ghostRef.current = ghost;
+    replayRef.current = replayTrades;
     intervalRef.current = interval;
-    applyGhost();
-  }, [ghost, interval, applyGhost]);
+    // 取引・足種・配色のどれが変わっても、引いてある線は色も位置も合わなくなる
+    const chart = chartRef.current;
+    const lines = tradeLinesRef.current;
+    if (chart) {
+      for (const [, s] of lines) chart.removeSeries(s);
+      lines.clear();
+    }
+    applyTradeLines();
+    applyMarks();
+  }, [ghost, replayTrades, interval, theme, applyMarks, applyTradeLines]);
 
   /** 足数に応じた表示レンジを適用する */
   const applyRange = useCallback(() => {
@@ -464,7 +561,8 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
         barCountRef.current = candles.length;
         lastBarTimeRef.current = candles.length ? candles[candles.length - 1].time : null;
         applyRange();
-        applyGhost();
+        applyMarks();
+        applyTradeLines();
       },
       updateCandle(c) {
         const isNewBar = lastBarTimeRef.current !== c.time;
@@ -476,7 +574,8 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
           bars.closes.push(c.close);
           // 満杯になるまでは左詰め。以降は lightweight-charts の自動スクロールに任せる。
           if (barCountRef.current <= VISIBLE_BARS) applyRange();
-          applyGhost();
+          applyMarks();
+          applyTradeLines();
         } else if (bars.closes.length > 0) {
           bars.closes[bars.closes.length - 1] = c.close;
         }
@@ -496,7 +595,7 @@ export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
         updateIndicatorsLast();
       },
     }),
-    [applyGhost, applyRange, redrawIndicators, updateIndicatorsLast],
+    [applyMarks, applyTradeLines, applyRange, redrawIndicators, updateIndicatorsLast],
   );
 
   return <div className="chart" ref={containerRef} />;

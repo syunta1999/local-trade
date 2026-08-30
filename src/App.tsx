@@ -17,9 +17,16 @@ import { analyze, type ChallengeLog } from './lib/analysis';
 import { BotBoard } from './components/BotBoard';
 import type { Level } from './lib/bot';
 import { decodeCsv, formatClock, parseCsv } from './lib/csv';
-import { loadGhost, resetChallenges, saveChallenge, type GhostTrade } from './lib/csvfile';
+import {
+  loadGhost,
+  loadReplays,
+  resetChallenges,
+  saveChallenge,
+  type GhostTrade,
+  type ReplayEntry,
+} from './lib/csvfile';
 import { DEFAULT_SETTINGS, type Box } from './lib/settings';
-import { applyTheme } from './lib/themes';
+import { applyTheme, RANDOM_THEME } from './lib/themes';
 import {
   setBgm,
   setLargeSize as setTapeLarge,
@@ -84,16 +91,25 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [theme, setTheme] = useState(DEFAULT_SETTINGS.theme);
+  /** random を引き直した回数。idが同じままでも当て直せるように鍵に混ぜる */
+  const [roll, setRoll] = useState(0);
+  const themeKey = theme === RANDOM_THEME ? `${theme}#${roll}` : theme;
   /**
    * 配色を当てる。子より先に効かせたいので副作用ではなくレンダー中に呼ぶ。
    * useEffect だと子（Chart）の副作用のほうが先に走ってしまい、
    * 差し替わる前のCSS変数を読んでチャートだけ前の色のまま残る。
    */
   const themeApplied = useRef('');
-  if (themeApplied.current !== theme) {
-    themeApplied.current = theme;
+  if (themeApplied.current !== themeKey) {
+    themeApplied.current = themeKey;
     applyTheme(theme);
   }
+
+  /** random はもう選ばれていても押すたびに引き直す */
+  const onTheme = useCallback((id: string) => {
+    setTheme(id);
+    if (id === RANDOM_THEME) setRoll((n) => n + 1);
+  }, []);
 
   const ticks = useMemo(() => data?.ticks ?? [], [data]);
   /** 呼値の刻み。銘柄ごとに違うのでデータから割り出す */
@@ -154,6 +170,13 @@ export default function App() {
   /** 歩み値はいつも見るものではないので畳める。畳むと板が広がる */
   const [tapeOpen, setTapeOpen] = useState(DEFAULT_SETTINGS.tapeOpen);
   const [ghost, setGhost] = useState<GhostTrade[]>([]);
+  /** 溜まっているチャレンジ。リプレイの選択肢になる */
+  const [replays, setReplays] = useState<ReplayEntry[]>([]);
+  /**
+   * いま見ているリプレイ。null なら通常の再生。
+   * ここが埋まっている間はチャートを赤枠にして、普通の再生と取り違えないようにする。
+   */
+  const [replayOf, setReplayOf] = useState<ReplayEntry | null>(null);
   const challengeTicksRef = useRef<Tick[]>([]);
   const challengeTickSizeRef = useRef(1);
 
@@ -226,6 +249,18 @@ export default function App() {
       alive = false;
     };
   }, [current, analysisLog]);
+
+  // リプレイの選択肢。チャレンジを1回終えるたびに増えるので読み直す
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const list = await loadReplays();
+      if (alive) setReplays(list);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [analysisLog]);
 
   // 大口の閾値は板の音の重みにも使う
   useEffect(() => {
@@ -412,7 +447,6 @@ export default function App() {
     [ind],
   );
 
-
   const load = useCallback(async (buf: ArrayBuffer, name: string) => {
     setLoading(true);
     setError(null);
@@ -465,9 +499,10 @@ export default function App() {
     };
   }, [load, refreshFiles]);
 
-  /** public/data 内のCSVに切り替える */
+  /** public/data 内のCSVに切り替える。CSVを選んだ時点でリプレイは終わり */
   const onSelectFile = useCallback(
     async (name: string) => {
+      setReplayOf(null);
       if (!name || name === current) return;
       try {
         await load(await fetchCsv(name), name);
@@ -478,12 +513,57 @@ export default function App() {
     [current, load],
   );
 
+  /** そのチャレンジを始めた時刻まで巻き戻す。無ければ先頭から */
+  const rewindRef = useRef<(entry: ReplayEntry) => void>(() => {});
+  rewindRef.current = (entry) => {
+    const at = ticks.findIndex((tk) => tk.t >= entry.fromAt);
+    onSeek(at < 0 ? 0 : at);
+  };
+
+  /**
+   * 過去のチャレンジをリプレイする。
+   * 別のCSVの記録なら、そのCSVに切り替えてから入る。
+   * 巻き戻して見ることになるので、記録中のチャレンジはここで区切る。
+   */
+  const onSelectReplay = useCallback(
+    async (entry: ReplayEntry) => {
+      if (recording) finishRef.current();
+      if (entry.fileName !== current) {
+        try {
+          if (!(await load(await fetchCsv(entry.fileName), entry.fileName))) return;
+        } catch (e) {
+          setError(
+            `${entry.fileName} を読み込めませんでした (${e instanceof Error ? e.message : e})`,
+          );
+          return;
+        }
+        // ティックが入れ替わってから巻き戻したいので、あとの副作用に任せる
+        setReplayOf(entry);
+        return;
+      }
+      // 同じものを選び直したときは state が動かず副作用も走らない。ここで巻き戻す
+      if (replayOf?.id === entry.id) rewindRef.current(entry);
+      setReplayOf(entry);
+    },
+    [recording, current, load, replayOf],
+  );
+
+  /**
+   * リプレイに入ったら、そのチャレンジを始めた時刻まで巻き戻す。
+   * CSVを読み直した場合は、ティックが入れ替わってからここが走る。
+   */
+  useEffect(() => {
+    if (!replayOf || ticks.length === 0 || replayOf.fileName !== current) return;
+    rewindRef.current(replayOf);
+  }, [replayOf, ticks, current]);
+
   /** 端末から開いたCSVは public/data に控えて、次から一覧で選べるようにする */
   const onPickFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = '';
       if (!file) return;
+      setReplayOf(null);
       const buf = await file.arrayBuffer();
       if (!(await load(buf, file.name))) return;
       try {
@@ -610,15 +690,40 @@ export default function App() {
       {loading && <div className="banner">読み込み中…</div>}
 
       <main className={`main${tapeOpen ? '' : ' tape-closed'}`}>
-        <section className="chart-wrap">
+        <section className={`chart-wrap${replayOf ? ' replay' : ''}`}>
           <IndicatorBar value={ind} onChange={patchInd} interval={intervalSec} disabled={disabled} />
           <Chart
             ref={sinkRef}
             indicators={indicators}
-            ghost={views.ghost ? ghost : EMPTY_GHOST}
+            // リプレイ中はそのチャレンジの売買だけを見せる。ゴーストと重ねると読めない
+            ghost={!replayOf && views.ghost ? ghost : EMPTY_GHOST}
+            replayTrades={replayOf ? replayOf.trades : EMPTY_GHOST}
             interval={intervalSec}
-            theme={theme}
+            theme={themeKey}
           />
+          {replayOf && (
+            <div className="replay-tag">
+              <b>リプレイ</b>
+              <span className="replay-of">
+                {replayOf.id}-{replayOf.symbol}-{replayOf.dateLabel}
+              </span>
+              <span className="replay-sub">
+                {replayOf.fromClock}〜{replayOf.toClock} · {replayOf.trades.length}取引
+              </span>
+              <span className={`replay-pnl ${replayOf.pnl >= 0 ? 'up' : 'down'}`}>
+                {replayOf.pnl >= 0 ? '+' : ''}
+                {nf.format(replayOf.pnl)}
+              </span>
+              <button
+                type="button"
+                className="replay-x"
+                onClick={() => setReplayOf(null)}
+                title="リプレイをやめて通常の再生に戻す"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </section>
 
         <TradePanel
@@ -699,13 +804,17 @@ export default function App() {
           sound={sound}
           onSound={onSound}
           theme={theme}
-          onTheme={setTheme}
+          onTheme={onTheme}
           onHelp={() => setShowHelp(true)}
           onReset={onReset}
           files={fileOptions}
           current={current}
           onSelectFile={onSelectFile}
           onOpenFile={() => fileRef.current?.click()}
+          replays={replays}
+          replayOf={replayOf}
+          onSelectReplay={onSelectReplay}
+          onExitReplay={() => setReplayOf(null)}
           onCollapse={() => toggleChrome('footer')}
           onBlankClick={blankClose('footer')}
           disabled={disabled}
@@ -819,4 +928,3 @@ function Stat({
     </div>
   );
 }
-
