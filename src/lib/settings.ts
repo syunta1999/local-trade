@@ -7,6 +7,7 @@
  */
 
 import type { Level } from './bot';
+import { DEFAULT_THEME, THEMES } from './themes';
 import type { SoundPrefs } from './sound';
 import type { IndicatorUi } from './types';
 
@@ -34,6 +35,8 @@ export type Settings = {
   level: Level;
   roundSec: number;
   matchBox: Box;
+  /** 対戦の窓を帯だけに畳んでいるか */
+  matchFold: boolean;
   /** botの売買パネルの位置・大きさ・畳んでいるか */
   botBox: Box;
   botOpen: boolean;
@@ -41,6 +44,8 @@ export type Settings = {
   /** ヘッダー・フッターを開いているか */
   header: boolean;
   footer: boolean;
+  /** 配色テーマ */
+  theme: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -62,11 +67,13 @@ export const DEFAULT_SETTINGS: Settings = {
   level: 'normal',
   roundSec: 1800,
   matchBox: { x: 12, y: 0, w: 290, h: 0 },
+  matchFold: false,
   botBox: { x: 0, y: 0, w: 560, h: 420 },
   botOpen: true,
   botFold: false,
   header: true,
   footer: true,
+  theme: DEFAULT_THEME,
 };
 
 const b = (v: boolean) => (v ? '1' : '0');
@@ -92,11 +99,13 @@ export function settingsToRows(s: Settings): string[] {
     `match.level,${s.level}`,
     `match.sec,${s.roundSec}`,
     `match.box,${[m.x, m.y, m.w, m.h].join('|')}`,
+    `match.fold,${b(s.matchFold)}`,
     `bot.box,${[s.botBox.x, s.botBox.y, s.botBox.w, s.botBox.h].join('|')}`,
     `bot.open,${b(s.botOpen)}`,
     `bot.fold,${b(s.botFold)}`,
     `chrome.header,${b(s.header)}`,
     `chrome.footer,${b(s.footer)}`,
+    `theme,${s.theme}`,
   ];
 }
 
@@ -166,11 +175,14 @@ export function settingsFromCsv(text: string): Settings {
       : fb;
   };
   s.matchBox = readBox('match.box', s.matchBox);
+  s.matchFold = bool('match.fold', s.matchFold);
   s.botBox = readBox('bot.box', s.botBox);
   s.botOpen = bool('bot.open', s.botOpen);
   s.botFold = bool('bot.fold', s.botFold);
 
   s.header = bool('chrome.header', s.header);
   s.footer = bool('chrome.footer', s.footer);
+  const th = map.get('theme');
+  if (th && THEMES.some((t) => t.id === th)) s.theme = th;
   return s;
 }

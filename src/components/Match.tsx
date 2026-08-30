@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { BOTS, LEVELS, totalOf, type Level } from '../lib/bot';
 import { DURATIONS, type MatchView, type Standing } from '../hooks/useMatch';
+import { useDragBox } from '../hooks/useDragBox';
 import type { Box } from '../lib/settings';
 
 const nf = new Intl.NumberFormat('ja-JP');
@@ -32,6 +33,9 @@ type Props = {
   /** 位置と大きさ。動かすたびに親へ返して保存してもらう */
   box: Box;
   onBox: (b: Box) => void;
+  /** 帯だけに畳んでいるか */
+  collapsed: boolean;
+  onCollapse: (v: boolean) => void;
   /** botの売買パネルが開いているか */
   botOpen: boolean;
   onBots: () => void;
@@ -52,45 +56,14 @@ export function MatchCard({
   onClose,
   box,
   onBox,
+  collapsed,
+  onCollapse,
   botOpen,
   onBots,
   disabled,
 }: Props) {
   const el = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ dx: number; dy: number } | null>(null);
-  // ドラッグ中は毎フレーム最新の位置が要るので控えを持つ。
-  // 読むのはポインタ操作の中だけなので、同期は副作用で足りる
-  const boxRef = useRef(box);
-  useEffect(() => {
-    boxRef.current = box;
-  }, [box]);
-
-  const onDown = useCallback((e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, input, select')) return;
-    drag.current = { dx: e.clientX - boxRef.current.x, dy: e.clientY - boxRef.current.y };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }, []);
-
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      onBox({
-        ...boxRef.current,
-        x: Math.max(0, Math.min(window.innerWidth - 120, e.clientX - d.dx)),
-        y: Math.max(0, Math.min(window.innerHeight - 40, e.clientY - d.dy)),
-      });
-    };
-    const up = () => {
-      drag.current = null;
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-  }, [onBox]);
+  const { boxRef, onDown, movedRef } = useDragBox(box, onBox, 120, 40);
 
   // 置き場所を決める。初回は左下、画面の外に出ていたら引き戻す
   useEffect(() => {
@@ -103,7 +76,7 @@ export function MatchCard({
       y: Math.max(8, Math.min(window.innerHeight - 40, y)),
     };
     if (fixed.x !== b.x || fixed.y !== b.y) onBox(fixed);
-  }, [onBox]);
+  }, [onBox, boxRef]);
 
   /**
    * 大きさは CSS の resize でブラウザが直接インラインに書くので、
@@ -114,13 +87,19 @@ export function MatchCard({
   useEffect(() => {
     const e = el.current;
     if (!e) return;
+    // 畳んでいる間は中身に合わせたいので、指定そのものを外す
+    if (collapsed) {
+      e.style.width = '';
+      e.style.height = '';
+      return;
+    }
     e.style.width = boxRef.current.w ? `${boxRef.current.w}px` : '';
     e.style.height = live && boxRef.current.h ? `${boxRef.current.h}px` : '';
-  }, [live]);
+  }, [live, collapsed, boxRef]);
 
   useEffect(() => {
     const e = el.current;
-    if (!e) return;
+    if (!e || collapsed) return;
     const ro = new ResizeObserver(() => {
       const w = Math.round(e.offsetWidth);
       const h = Math.round(e.offsetHeight);
@@ -131,15 +110,39 @@ export function MatchCard({
     });
     ro.observe(e);
     return () => ro.disconnect();
-  }, [live, onBox]);
+  }, [live, collapsed, onBox, boxRef]);
 
   const style = { left: box.x, top: box.y > 0 ? box.y : undefined };
+
+  if (collapsed) {
+    return (
+      <div className="match collapsed" ref={el} style={style}>
+        <header onPointerDown={onDown}>
+          <button
+            type="button"
+            className="grip match-grip"
+            onClick={() => {
+              // 動かしただけのときは開かない
+              if (!movedRef.current) onCollapse(false);
+            }}
+            title="押すと開く / 掴んで移動"
+          >
+            対戦
+            {match.active && <b>{mmss(match.remain)}</b>}
+          </button>
+        </header>
+      </div>
+    );
+  }
 
   if (!match.active) {
     return (
       <div className="match setup" ref={el} style={style}>
         <header onPointerDown={onDown}>
           <strong>対戦</strong>
+          <button type="button" className="x" onClick={() => onCollapse(true)} title="細く畳む">
+            —
+          </button>
           <button type="button" className="x" onClick={onClose} title="閉じる">
             ✕
           </button>
@@ -233,6 +236,9 @@ export function MatchCard({
       <header onPointerDown={onDown}>
         <strong>対戦</strong>
         <span className="match-clock">残り {mmss(match.remain)}</span>
+        <button type="button" className="x" onClick={() => onCollapse(true)} title="細く畳む">
+          —
+        </button>
         <button type="button" className="x" onClick={onClose} title="閉じる（対戦は続きます）">
           ✕
         </button>

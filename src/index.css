@@ -1,14 +1,77 @@
 :root {
+  /* ---- テーマが差し替えるのはこの7色だけ。あとは color-mix で作る ----
+     こうしておくと、テーマを1つ足すのに7行書けば済む */
   --bg: #0e1116;
-  --panel: #141922;
-  --panel-2: #10151d;
-  --grid: #1c2128;
-  --border: #2b313a;
-  --text: #c9d1d9;
-  --muted: #7d8590;
+  --fg: #c9d1d9;
   --up: #ef5350;
   --down: #42a5f5;
   --accent: #f0b429;
+  --sel: #4a6ea8;
+  --ok: #06d6a0;
+  /* 明暗の「振り切った側」。暗いテーマは白、明るいテーマは黒を入れる */
+  --edge: #ffffff;
+
+  /* ---- 面（背景に文字色を少しずつ混ぜて階調を作る） ---- */
+  --deep: color-mix(in srgb, var(--fg) 2%, var(--bg));
+  --panel-2: color-mix(in srgb, var(--fg) 3%, var(--bg));
+  --panel: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --grid: color-mix(in srgb, var(--fg) 6%, var(--bg));
+  --sunken: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  --hover: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  --raise: color-mix(in srgb, var(--fg) 9%, var(--bg));
+  --raise-2: color-mix(in srgb, var(--fg) 13%, var(--bg));
+  --border: color-mix(in srgb, var(--fg) 16%, var(--bg));
+  --border-2: color-mix(in srgb, var(--fg) 23%, var(--bg));
+
+  /* ---- 文字 ---- */
+  --text: var(--fg);
+  --bright: color-mix(in srgb, var(--fg) 86%, var(--edge));
+  --soft: color-mix(in srgb, var(--fg) 84%, var(--bg));
+  --muted: color-mix(in srgb, var(--fg) 60%, var(--bg));
+  --dim: color-mix(in srgb, var(--fg) 40%, var(--bg));
+  --line: color-mix(in srgb, var(--fg) 30%, var(--bg));
+  --faint: color-mix(in srgb, var(--fg) 22%, var(--bg));
+
+  /* ---- 役割のある色 ---- */
+  --sel-bg: color-mix(in srgb, var(--sel) 62%, var(--bg));
+  --sel-dim: color-mix(in srgb, var(--sel) 34%, var(--bg));
+  --ask-fg: color-mix(in srgb, var(--down) 55%, var(--fg));
+  --bid-fg: color-mix(in srgb, var(--up) 55%, var(--fg));
+  --warn-fg: color-mix(in srgb, var(--accent) 72%, var(--fg));
+  --err-fg: color-mix(in srgb, var(--up) 62%, var(--fg));
+  --err-bg: color-mix(in srgb, var(--up) 12%, var(--bg));
+  --gold-bg: color-mix(in srgb, var(--accent) 38%, var(--bg));
+  --gold-line: color-mix(in srgb, var(--accent) 56%, var(--bg));
+
+  /* ---- 半透明（板の光り・帯・影） ---- */
+  --up-a: color-mix(in srgb, var(--up) 12%, transparent);
+  --up-a2: color-mix(in srgb, var(--up) 30%, transparent);
+  --down-a: color-mix(in srgb, var(--down) 12%, transparent);
+  --down-a2: color-mix(in srgb, var(--down) 30%, transparent);
+  --accent-a: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-a2: color-mix(in srgb, var(--accent) 36%, transparent);
+  --veil: color-mix(in srgb, var(--bg) 78%, transparent);
+  --float: color-mix(in srgb, var(--panel) 97%, transparent);
+  --shadow: rgba(0, 0, 0, 0.5);
+
+  /* ---- チャートの線。JS からも読むので、色の定義はここ1か所に集める ---- */
+  --ma-5: #ffd166;
+  --ma-10: #f78c6c;
+  --ma-25: #06d6a0;
+  --ma-50: #4db6ac;
+  --ma-75: #c792ea;
+  --ma-100: #f2a4d0;
+  --ma-200: #a0a8b4;
+  --ma-x: #d0d7de;
+  --bb-band: #dfe6f0;
+  --bb-mid: #6f7a8a;
+  --rsi-line: #ffb74d;
+  --rsi-guide: #4a5361;
+  --ghost: #8b7fd4;
+  --bot-fade: #5ec8e5;
+  --bot-break: #f0b429;
+  --bot-scalp: #c792ea;
+
   /* インジケーターバーの高さ。.chart の上端オフセットと揃える */
   --ind-h: 34px;
 
@@ -16,6 +79,11 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Segoe UI',
     sans-serif;
   font-size: 13px;
+}
+
+/* 明るいテーマのときだけ、フォームの見た目を切り替える */
+:root[data-light] {
+  color-scheme: light;
 }
 
 * {
@@ -120,8 +188,8 @@ body {
   padding: 1px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: #1a1f28;
-  color: #98a2b0;
+  background: var(--sunken);
+  color: var(--soft);
   font-size: 10px;
 }
 
@@ -163,7 +231,7 @@ body {
 }
 
 .chrome-x:hover {
-  background: #1e242e;
+  background: var(--raise);
   color: var(--text);
 }
 
@@ -183,7 +251,7 @@ body {
 }
 
 .chrome-bar:hover {
-  background: #1a2029;
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -195,15 +263,15 @@ body {
 /* ---------- banners ---------- */
 .banner {
   padding: 6px 14px;
-  background: #1a2029;
+  background: var(--hover);
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
 }
 
 .banner.error {
-  background: #2a1a1c;
-  color: #ff9a9a;
+  background: var(--err-bg);
+  color: var(--err-fg);
 }
 
 /* ---------- main ---------- */
@@ -270,7 +338,7 @@ body {
 .ind-toggle {
   padding: 4px 9px;
   min-width: 40px;
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -281,13 +349,13 @@ body {
 }
 
 .ind-toggle:hover:not(:disabled) {
-  border-color: #4a5361;
+  border-color: var(--line);
   color: var(--text);
 }
 
 .ind-toggle.on {
-  background: #35507a;
-  border-color: #4a6ea8;
+  background: var(--sel-bg);
+  border-color: var(--sel);
   color: #fff;
 }
 
@@ -306,7 +374,7 @@ body {
   padding: 4px 7px;
   min-width: 28px;
   background: transparent;
-  color: #5c6470;
+  color: var(--dim);
   border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
@@ -316,12 +384,12 @@ body {
 
 .ind-chip:hover:not(:disabled) {
   color: var(--text);
-  background: #1a1f28;
+  background: var(--sunken);
 }
 
 .ind-chip.on {
-  background: #1a1f28;
-  border-color: #4a5361;
+  background: var(--sunken);
+  border-color: var(--line);
   color: var(--text);
 }
 
@@ -370,7 +438,7 @@ body {
 }
 
 .side-toggle:hover {
-  background: #1e242e;
+  background: var(--raise);
 }
 
 .side-toggle .chev {
@@ -392,13 +460,13 @@ body {
 }
 
 .side-rail:hover {
-  background: #161c25;
+  background: var(--grid);
   color: var(--text);
 }
 
 /* botが板の外に置いている注文 */
 .off-board.bots {
-  border-color: #3a4453;
+  border-color: var(--border-2);
 }
 
 .bot-chip {
@@ -420,7 +488,7 @@ body {
   width: 290px;
   max-height: calc(100vh - 24px);
   overflow-y: auto;
-  background: rgba(20, 25, 34, 0.97);
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
@@ -428,6 +496,21 @@ body {
   resize: both;
   min-width: 220px;
   min-height: 80px;
+}
+
+/* 畳むと見出しの帯だけになる。この状態でも掴んで動かせる */
+.match.collapsed {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  resize: none;
+}
+
+.match.collapsed header {
+  padding: 0;
+  border-bottom: none;
 }
 
 .match header {
@@ -482,10 +565,10 @@ body {
 .match-warn {
   margin: 8px 10px 0;
   padding: 7px 9px;
-  background: rgba(240, 180, 41, 0.1);
-  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: 5px;
-  color: #e8c979;
+  color: var(--warn-fg);
   font-size: 10px;
   line-height: 1.6;
 }
@@ -529,7 +612,7 @@ body {
 }
 
 .match-bot .match-weak {
-  color: #5c6470;
+  color: var(--dim);
 }
 
 .match-opt {
@@ -570,7 +653,7 @@ body {
 }
 
 .match-row.me {
-  background: rgba(240, 180, 41, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .match-row .rank,
@@ -625,7 +708,7 @@ body {
   min-height: 120px;
   max-width: 96vw;
   max-height: calc(100vh - 24px);
-  background: rgba(20, 25, 34, 0.97);
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
@@ -665,7 +748,7 @@ body {
 
 .botb-hint {
   flex: 1;
-  color: #5c6470;
+  color: var(--dim);
   font-size: 9px;
 }
 
@@ -682,10 +765,11 @@ body {
   color: var(--text);
 }
 
-.botb-grip {
+/* 畳んだときの帯。押すと開き、掴めばそのまま動かせる */
+.grip {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 5px 11px;
   background: none;
   border: none;
@@ -695,8 +779,14 @@ body {
   white-space: nowrap;
 }
 
-.botb-grip:hover {
+.grip:hover {
   color: var(--text);
+}
+
+/* 対戦の帯に出す残り時間 */
+.match-grip b {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .botb-grip i {
@@ -725,7 +815,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
-  background: #11161e;
+  background: var(--deep);
 }
 
 .botp-head {
@@ -758,8 +848,9 @@ body {
 .botp-art {
   display: block;
   width: 100%;
-  height: 56px;
-  background: #0d1219;
+  height: 64px;
+  /* viewBox を実寸に合わせているので、拡大縮小はさせない */
+  background: var(--deep);
   border-top: 1px solid var(--grid);
   border-bottom: 1px solid var(--grid);
 }
@@ -779,7 +870,7 @@ body {
   padding: 0 9px;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  border-bottom: 1px solid #161c25;
+  border-bottom: 1px solid var(--grid);
 }
 
 .botp-row:last-child {
@@ -787,11 +878,11 @@ body {
 }
 
 .botp-row.live {
-  background: rgba(240, 180, 41, 0.09);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .botp-row .t {
-  color: #5c6470;
+  color: var(--dim);
 }
 
 .botp-row .px {
@@ -799,7 +890,7 @@ body {
 }
 
 .botp-row .px b {
-  color: #5c6470;
+  color: var(--dim);
   font-weight: 400;
   padding: 0 2px;
 }
@@ -817,7 +908,7 @@ body {
 
 .botp-none {
   padding: 8px 9px;
-  color: #5c6470;
+  color: var(--dim);
   font-size: 10px;
 }
 
@@ -845,8 +936,8 @@ body {
 }
 
 .res-row.me {
-  background: rgba(240, 180, 41, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(240, 180, 41, 0.3);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .res-note {
@@ -859,8 +950,55 @@ body {
 
 /* 対戦中はボタンで分かるように */
 .mini.live {
-  border-color: #9a7030;
+  border-color: var(--gold-line);
   color: var(--accent);
+}
+
+/* ---- 配色テーマ ---- */
+.swatch {
+  display: inline-flex;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  vertical-align: -2px;
+}
+
+.swatch i {
+  display: block;
+  width: 6px;
+  height: 11px;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.theme-row:hover {
+  background: var(--hover);
+}
+
+.theme-row.on {
+  background: var(--sel-dim);
+}
+
+.theme-label {
+  flex: 1;
+}
+
+.theme-now {
+  color: var(--muted);
+  font-size: 9px;
 }
 
 /* ---- ボタンの解説（0.5秒ホバー） ---- */
@@ -870,8 +1008,8 @@ body {
   max-width: 264px;
   padding: 9px 11px;
   transform: translateX(-50%);
-  background: #1b222d;
-  border: 1px solid #3a4453;
+  background: var(--hover);
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
   pointer-events: none;
@@ -887,7 +1025,7 @@ body {
 
 .hint p {
   margin: 0;
-  color: #a8b2c0;
+  color: var(--soft);
   font-size: 11px;
   line-height: 1.6;
 }
@@ -899,31 +1037,102 @@ body {
   }
 }
 
-/* ---- 音の切り替え ---- */
-.sound-menu {
+/* ---- 設定メニュー（音・テーマ・再生・記録） ---- */
+.set-menu {
   position: relative;
+  flex-shrink: 0;
 }
 
-.sound-btn {
-  font-size: 11px;
+.set-btn {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 
-.sound-btn.on {
+.set-btn.on,
+.set-btn:hover {
   color: var(--text);
 }
 
-.sound-pop {
+.set-pop {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 0;
+  right: 0;
   z-index: 30;
-  min-width: 300px;
+  width: 320px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
   padding: 6px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.set-sec + .set-sec {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--grid);
+}
+
+.set-sec h4 {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.set-note {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.set-note b {
+  color: var(--warn-fg);
+}
+
+.set-reset {
+  margin: 0 8px;
+  font-size: 12px;
+}
+
+/* 消す一歩手前。並びを変えて、続けて同じ場所を押しても消えないようにする */
+.set-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px;
+  font-size: 11px;
+}
+
+.set-confirm span {
+  width: 100%;
+  color: var(--warn-fg);
+}
+
+.btn.danger {
+  background: color-mix(in srgb, var(--down) 30%, transparent);
+  border-color: var(--down);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--down) 48%, transparent);
+}
+
+.set-fail {
+  margin: 6px 8px 0;
+  color: var(--warn-fg);
+  font-size: 10px;
+  line-height: 1.6;
 }
 
 .sound-row {
@@ -937,7 +1146,7 @@ body {
 }
 
 .sound-row:hover {
-  background: #1c222c;
+  background: var(--hover);
 }
 
 .sound-label {
@@ -1001,7 +1210,7 @@ body {
 }
 
 .tape-row.latest {
-  background: rgba(240, 180, 41, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .tape-row.large {
@@ -1043,7 +1252,7 @@ body {
   min-width: 34px;
   height: 28px;
   padding: 0 9px;
-  background: #1e242e;
+  background: var(--raise);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -1052,7 +1261,7 @@ body {
 }
 
 .btn:hover:not(:disabled) {
-  background: #262d38;
+  background: var(--raise-2);
 }
 
 .btn:disabled {
@@ -1062,8 +1271,8 @@ body {
 
 .btn.play {
   min-width: 46px;
-  background: #223047;
-  border-color: #35507a;
+  background: var(--sel-dim);
+  border-color: var(--sel-bg);
 }
 
 .btn.ghost {
@@ -1087,7 +1296,7 @@ body {
 
 .seg-btn {
   padding: 5px 9px;
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   border: none;
   border-right: 1px solid var(--border);
@@ -1101,7 +1310,7 @@ body {
 }
 
 .seg-btn.on {
-  background: #35507a;
+  background: var(--sel-bg);
   color: #fff;
 }
 
@@ -1124,7 +1333,7 @@ body {
 }
 
 select {
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1138,6 +1347,15 @@ select {
   gap: 14px;
 }
 
+/* 説明と設定は右端にまとめる */
+.seek-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* シークは左寄せ。長さはそのまま。右端は説明ボタンに空けておく */
 .seek-bar {
   display: flex;
@@ -1149,7 +1367,7 @@ select {
 .seek input[type='range'] {
   flex: 1;
   min-width: 0;
-  accent-color: #4d7ec0;
+  accent-color: var(--sel);
   height: 4px;
 }
 
@@ -1173,7 +1391,7 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2c333d;
+  background: var(--border);
   border-radius: 5px;
 }
 
@@ -1261,7 +1479,7 @@ select {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #5c6470;
+  color: var(--dim);
 }
 
 .hold.on {
@@ -1273,17 +1491,17 @@ select {
   text-align: center;
   border-radius: 3px;
   font-size: 10px;
-  background: #1a1f28;
+  background: var(--sunken);
 }
 
 .hold.buy.on .hold-k {
-  background: rgba(239, 83, 80, 0.22);
-  color: #ffb3b1;
+  background: color-mix(in srgb, var(--up) 22%, transparent);
+  color: var(--bid-fg);
 }
 
 .hold.sell.on .hold-k {
-  background: rgba(66, 165, 245, 0.22);
-  color: #a8d5ff;
+  background: color-mix(in srgb, var(--down) 22%, transparent);
+  color: var(--ask-fg);
 }
 
 .hold-p {
@@ -1320,7 +1538,7 @@ select {
   border: none;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
-  background: #10151d;
+  background: var(--panel-2);
   color: var(--text);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -1336,7 +1554,7 @@ select {
 
 .lot-btn {
   padding: 4px 7px;
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   border: none;
   cursor: pointer;
@@ -1345,7 +1563,7 @@ select {
 }
 
 .lot-btn:hover:not(:disabled) {
-  background: #232a35;
+  background: var(--raise);
   color: var(--text);
 }
 
@@ -1373,7 +1591,7 @@ select {
   padding: 4px 6px;
   border-radius: 4px;
   border: 1px solid var(--border);
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   cursor: pointer;
   font-size: 10px;
@@ -1381,15 +1599,15 @@ select {
 }
 
 .bulk.sell:not(:disabled) {
-  border-color: rgba(66, 165, 245, 0.5);
-  color: #a8d5ff;
-  background: rgba(66, 165, 245, 0.12);
+  border-color: color-mix(in srgb, var(--down) 50%, transparent);
+  color: var(--ask-fg);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
 }
 
 .bulk.buy:not(:disabled) {
-  border-color: rgba(239, 83, 80, 0.5);
-  color: #ffb3b1;
-  background: rgba(239, 83, 80, 0.12);
+  border-color: color-mix(in srgb, var(--up) 50%, transparent);
+  color: var(--bid-fg);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
 }
 
 .bulk:hover:not(:disabled) {
@@ -1411,7 +1629,7 @@ select {
 .bk-head {
   padding: 4px 6px;
   font-size: 9px;
-  color: #5c6470;
+  color: var(--dim);
   text-align: center;
   border-bottom: 1px solid var(--border);
 }
@@ -1422,8 +1640,8 @@ select {
 
 /* クリックで値段を固定している間 */
 .bk-body.frozen {
-  background: rgba(240, 180, 41, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(240, 180, 41, 0.35);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .bk-head .frozen {
@@ -1440,10 +1658,10 @@ select {
 /* 現在値は常にここ。主要なクリック先なので枠で狙いを付けやすくする
    （border だと行の高さが変わるので inset の影で描く） */
 .bk-row.last {
-  background: #1b222d;
+  background: var(--hover);
   box-shadow:
-    inset 0 1px 0 rgba(240, 180, 41, 0.4),
-    inset 0 -1px 0 rgba(240, 180, 41, 0.4);
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 40%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .bk-row.last .bk-price {
@@ -1472,11 +1690,11 @@ select {
 }
 
 .bk-hit.sell:hover:not(:disabled) {
-  background: rgba(66, 165, 245, 0.13);
+  background: color-mix(in srgb, var(--down) 13%, transparent);
 }
 
 .bk-hit.buy:hover:not(:disabled) {
-  background: rgba(239, 83, 80, 0.13);
+  background: color-mix(in srgb, var(--up) 13%, transparent);
 }
 
 .bk-hit:disabled {
@@ -1495,15 +1713,15 @@ select {
 .bk-ask {
   padding-right: 8px;
   text-align: right;
-  color: #a8d5ff;
-  background: rgba(66, 165, 245, 0.1);
+  color: var(--ask-fg);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
 }
 
 .bk-bid {
   padding-left: 8px;
   text-align: left;
-  color: #ffb3b1;
-  background: rgba(239, 83, 80, 0.1);
+  color: var(--bid-fg);
+  background: color-mix(in srgb, var(--up) 10%, transparent);
 }
 
 .bk-price {
@@ -1550,21 +1768,21 @@ select {
   padding: 1px 2px;
   border-radius: 3px;
   border: 1px solid transparent;
-  background: #3a4250;
-  color: #e6edf3;
+  background: var(--faint);
+  color: var(--bright);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
 .chip.open {
-  background: #35507a;
-  border-color: #4a6ea8;
+  background: var(--sel-bg);
+  border-color: var(--sel);
 }
 
 .chip.close {
-  background: #6a4a1e;
-  border-color: #9a7030;
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
 }
 
 .chip:hover {
@@ -1582,13 +1800,13 @@ select {
 
 @keyframes flash-buy {
   from {
-    background: rgba(239, 83, 80, 0.55);
+    background: color-mix(in srgb, var(--up) 55%, transparent);
   }
 }
 
 @keyframes flash-sell {
   from {
-    background: rgba(66, 165, 245, 0.55);
+    background: color-mix(in srgb, var(--down) 55%, transparent);
   }
 }
 
@@ -1600,7 +1818,7 @@ select {
   gap: 4px;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
-  background: #161b24;
+  background: var(--deep);
   font-size: 10px;
   color: var(--muted);
 }
@@ -1613,7 +1831,7 @@ select {
 .trade-msg {
   flex: 0 0 auto;
   padding: 5px 10px;
-  background: rgba(240, 180, 41, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-bottom: 1px solid var(--border);
   color: var(--accent);
   font-size: 10px;
@@ -1649,7 +1867,7 @@ select {
 
 .mini {
   padding: 3px 6px;
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1659,7 +1877,7 @@ select {
 
 .mini:hover:not(:disabled) {
   color: var(--text);
-  border-color: #4a5361;
+  border-color: var(--line);
 }
 
 .mini:disabled {
@@ -1681,21 +1899,21 @@ select {
   gap: 4px;
   padding: 3px 8px;
   font-size: 10px;
-  border-bottom: 1px solid #171c25;
+  border-bottom: 1px solid var(--deep);
 }
 
 .hist-side {
   text-align: center;
   border-radius: 3px;
-  background: #1a1f28;
+  background: var(--sunken);
 }
 
 .hist-side.buy {
-  color: #ffb3b1;
+  color: var(--bid-fg);
 }
 
 .hist-side.sell {
-  color: #a8d5ff;
+  color: var(--ask-fg);
 }
 
 .hist-q,
@@ -1715,7 +1933,7 @@ select {
 
 .hist-empty {
   padding: 14px 8px;
-  color: #4a5361;
+  color: var(--line);
   font-size: 10px;
   text-align: center;
 }
@@ -1737,7 +1955,7 @@ select {
   align-items: center;
   gap: 6px;
   padding: 5px 9px;
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -1748,7 +1966,7 @@ select {
 
 .ch-btn:hover:not(:disabled) {
   color: var(--text);
-  border-color: #4a5361;
+  border-color: var(--line);
 }
 
 .ch-btn:disabled {
@@ -1760,13 +1978,13 @@ select {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #4a5361;
+  background: var(--line);
 }
 
 .ch-btn.on {
-  background: rgba(239, 83, 80, 0.14);
-  border-color: rgba(239, 83, 80, 0.55);
-  color: #ffb3b1;
+  background: color-mix(in srgb, var(--up) 14%, transparent);
+  border-color: color-mix(in srgb, var(--up) 55%, transparent);
+  color: var(--bid-fg);
 }
 
 .ch-btn.on .ch-dot {
@@ -1784,7 +2002,7 @@ select {
   margin-left: auto;
   padding: 0 5px;
   border-radius: 8px;
-  background: #2b313a;
+  background: var(--border);
   color: var(--text);
   font-style: normal;
   font-size: 10px;
@@ -1800,7 +2018,7 @@ select {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(6, 9, 13, 0.78);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
 }
 
 .an {
@@ -1858,8 +2076,8 @@ select {
   margin: 0 0 14px;
   padding: 7px 10px;
   border-radius: 5px;
-  background: rgba(240, 180, 41, 0.1);
-  border: 1px solid rgba(240, 180, 41, 0.3);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--accent);
   font-size: 11px;
   line-height: 1.6;
@@ -1878,13 +2096,13 @@ select {
 }
 
 .verdict.good {
-  background: rgba(239, 83, 80, 0.1);
-  border-color: rgba(239, 83, 80, 0.4);
+  background: color-mix(in srgb, var(--up) 10%, transparent);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
 }
 
 .verdict.bad {
-  background: rgba(66, 165, 245, 0.08);
-  border-color: rgba(66, 165, 245, 0.35);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+  border-color: color-mix(in srgb, var(--down) 35%, transparent);
 }
 
 .verdict-main {
@@ -1932,7 +2150,7 @@ select {
 .an-table td {
   padding: 4px 8px;
   text-align: right;
-  border-bottom: 1px solid #1a1f28;
+  border-bottom: 1px solid var(--sunken);
 }
 
 .an-table thead th {
@@ -1983,7 +2201,7 @@ select {
 }
 
 .card-n {
-  color: #5c6470;
+  color: var(--dim);
   font-size: 9px;
   line-height: 1.5;
 }
@@ -2024,19 +2242,19 @@ select {
 }
 
 .hist-bar.up {
-  background: rgba(239, 83, 80, 0.55);
+  background: color-mix(in srgb, var(--up) 55%, transparent);
 }
 
 .hist-bar.down {
-  background: rgba(66, 165, 245, 0.55);
+  background: color-mix(in srgb, var(--down) 55%, transparent);
 }
 
 .hist-bar.flat {
-  background: #3a4250;
+  background: var(--faint);
 }
 
 .hist-col span {
-  color: #5c6470;
+  color: var(--dim);
   font-size: 8px;
 }
 
@@ -2059,7 +2277,7 @@ select {
 }
 
 .sweep tr.best td {
-  background: rgba(240, 180, 41, 0.09);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 @media (max-width: 760px) {
@@ -2074,11 +2292,11 @@ select {
 }
 
 .an-table.pick tbody tr:hover {
-  background: #1a1f28;
+  background: var(--sunken);
 }
 
 .an-table.pick tbody tr.on {
-  background: rgba(240, 180, 41, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -2100,9 +2318,9 @@ select {
 }
 
 .mini.danger {
-  border-color: rgba(239, 83, 80, 0.5);
-  color: #ffb3b1;
-  background: rgba(239, 83, 80, 0.12);
+  border-color: color-mix(in srgb, var(--up) 50%, transparent);
+  color: var(--bid-fg);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
 }
 
 .mini.danger:hover:not(:disabled) {
@@ -2120,8 +2338,8 @@ select {
 }
 
 .mini.on {
-  background: #35507a;
-  border-color: #4a6ea8;
+  background: var(--sel-bg);
+  border-color: var(--sel);
   color: #fff;
 }
 
@@ -2136,7 +2354,7 @@ select {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: rgba(20, 25, 34, 0.96);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: 7px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -2152,7 +2370,7 @@ select {
   justify-content: space-between;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
-  background: #1a1f28;
+  background: var(--sunken);
   cursor: move;
   font-size: 11px;
   font-weight: 700;
@@ -2165,7 +2383,7 @@ select {
   margin-left: 4px;
   padding: 0 5px;
   border-radius: 8px;
-  background: #35507a;
+  background: var(--sel-bg);
   color: #fff;
   font-style: normal;
   font-size: 10px;
@@ -2185,7 +2403,7 @@ select {
 }
 
 .rp-x:hover {
-  background: #2b313a;
+  background: var(--border);
   color: var(--text);
 }
 
@@ -2204,7 +2422,7 @@ select {
   padding: 4px 5px;
   border-radius: 4px;
   font-size: 10px;
-  color: #5c6470;
+  color: var(--dim);
 }
 
 .rp-row.on {
@@ -2218,12 +2436,12 @@ select {
 
 @keyframes viol {
   0% {
-    background: rgba(239, 83, 80, 0.55);
+    background: color-mix(in srgb, var(--up) 55%, transparent);
     box-shadow: inset 0 0 0 1px var(--up);
   }
   50% {
     background: transparent;
-    box-shadow: inset 0 0 0 1px rgba(239, 83, 80, 0.4);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--up) 40%, transparent);
   }
 }
 
@@ -2231,7 +2449,7 @@ select {
   width: 16px;
   height: 16px;
   padding: 0;
-  background: #10151d;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: transparent;
@@ -2241,8 +2459,8 @@ select {
 }
 
 .rp-chk.on {
-  background: #35507a;
-  border-color: #4a6ea8;
+  background: var(--sel-bg);
+  border-color: var(--sel);
   color: #fff;
 }
 
@@ -2255,7 +2473,7 @@ select {
 .rp-val {
   width: 100%;
   padding: 2px 4px;
-  background: #10151d;
+  background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -2266,7 +2484,7 @@ select {
 
 .rp-fmt {
   white-space: nowrap;
-  color: #5c6470;
+  color: var(--dim);
   font-size: 9px;
 }
 
@@ -2282,7 +2500,7 @@ select {
   flex-direction: column;
   gap: 3px;
   padding: 9px 11px;
-  background: rgba(20, 25, 34, 0.96);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: 7px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -2290,8 +2508,8 @@ select {
 }
 
 .daily.done {
-  background: rgba(6, 214, 160, 0.14);
-  border-color: rgba(6, 214, 160, 0.6);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 60%, transparent);
 }
 
 .daily-head {
@@ -2304,7 +2522,7 @@ select {
 }
 
 .daily.done .daily-head {
-  color: #06d6a0;
+  color: var(--ok);
 }
 
 .daily-title {
@@ -2313,11 +2531,11 @@ select {
 }
 
 .daily.done .daily-title {
-  color: #6ff0cd;
+  color: var(--ok);
 }
 
 .daily-detail {
-  color: #5c6470;
+  color: var(--dim);
   line-height: 1.5;
 }
 
@@ -2335,7 +2553,7 @@ select {
 .daily-foot em {
   padding: 1px 7px;
   border-radius: 8px;
-  background: #06d6a0;
+  background: var(--ok);
   color: #06231b;
   font-style: normal;
   font-weight: 700;
@@ -2344,18 +2562,17 @@ select {
 /* ================= 機能の説明 ================= */
 
 .help-btn {
-  margin-left: auto;
   flex-shrink: 0;
   height: 34px;
   padding: 0 16px;
   font-size: 14px;
   font-weight: 600;
-  background: #223047;
-  border-color: #35507a;
+  background: var(--sel-dim);
+  border-color: var(--sel-bg);
 }
 
 .help-btn:hover {
-  background: #2b3d59;
+  background: var(--sel-bg);
 }
 
 .help {
@@ -2397,12 +2614,12 @@ select {
 }
 
 .help-nav button:hover {
-  background: #1a1f28;
+  background: var(--sunken);
   color: var(--text);
 }
 
 .help-nav button.on {
-  background: #35507a;
+  background: var(--sel-bg);
   color: #fff;
   font-weight: 700;
 }
@@ -2416,7 +2633,7 @@ select {
 .help-item {
   padding-bottom: 16px;
   margin-bottom: 16px;
-  border-bottom: 1px solid #1a1f28;
+  border-bottom: 1px solid var(--sunken);
 }
 
 .help-item:last-child {
@@ -2450,7 +2667,7 @@ select {
   margin: 0 0 7px;
   font-size: 11px;
   line-height: 1.8;
-  color: #b6bfca;
+  color: var(--soft);
 }
 
 .help-text p:last-child {
@@ -2481,7 +2698,7 @@ select {
   margin-bottom: 3px;
   font-size: 11px;
   line-height: 1.75;
-  color: #b6bfca;
+  color: var(--soft);
 }
 
 .help-text li b {
@@ -2491,9 +2708,9 @@ select {
 .help-text p.warn {
   padding: 6px 9px;
   border-radius: 4px;
-  background: rgba(240, 180, 41, 0.09);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   border-left: 2px solid var(--accent);
-  color: #d9b96a;
+  color: var(--warn-fg);
 }
 
 @media (max-width: 720px) {

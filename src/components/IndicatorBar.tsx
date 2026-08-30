@@ -1,4 +1,3 @@
-import { MA_COLORS, MA_FALLBACK } from '../lib/colors';
 import type { IndicatorUi } from '../lib/types';
 
 /** 移動平均の本数プリセット。色は colors.ts で本数ごとに固定 */
@@ -54,7 +53,7 @@ export function IndicatorBar({ value, onChange, interval, disabled }: Props) {
                 type="button"
                 key={p}
                 className={`ind-chip${active ? ' on' : ''}`}
-                style={active ? { color: MA_COLORS[p] ?? MA_FALLBACK, borderColor: MA_COLORS[p] ?? MA_FALLBACK } : undefined}
+                style={active ? { color: `var(--ma-${p}, var(--ma-x))`, borderColor: `var(--ma-${p}, var(--ma-x))` } : undefined}
                 onClick={() => togglePeriod(p)}
                 disabled={disabled}
                 title={`${p}本移動平均（いまの足で ${formatSpan(p * interval)}）`}

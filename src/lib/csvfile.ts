@@ -125,8 +125,15 @@ export function challengeTradeRows(log: ChallengeLog, a: Analysis): string[] {
   });
 }
 
+/**
+ * リセットを始めたら以後の書き戻しを止める。
+ * 消した直後に、画面が持っている古い設定やルールが書き直されるのを防ぐ。
+ */
+let frozen = false;
+
 /** 開発サーバーに記録を溜める。APIが無ければ黙って諦める */
 export async function saveChallenge(log: ChallengeLog, a: Analysis): Promise<boolean> {
+  if (frozen) return false;
   try {
     const res = await fetch('/api/challenges', {
       method: 'POST',
@@ -258,6 +265,28 @@ export async function loadChallenges(): Promise<StoredChallenges | null> {
   return { summaries, items, cancelled };
 }
 
+/**
+ * data/challenges を初期状態に戻す。ファイルごと消すので、
+ * 次に読むときは既定値になる。呼び出し側は画面を作り直すこと。
+ */
+export async function resetChallenges(): Promise<boolean> {
+  frozen = true;
+  try {
+    const res = await fetch('/api/challenges', { method: 'DELETE' });
+    const body = res.ok
+      ? ((await res.json().catch(() => null)) as { removed?: string[] } | null)
+      : null;
+    // APIの無いところ（ビルド後の配信など）では index.html が返る。
+    // 消した一覧が返ってきたときだけ成功とみなす
+    if (Array.isArray(body?.removed)) return true;
+    frozen = false;
+    return false;
+  } catch {
+    frozen = false;
+    return false;
+  }
+}
+
 /** チャレンジ1件ぶんの記録を消す */
 export async function deleteChallenge(id: string): Promise<boolean> {
   try {
@@ -319,6 +348,7 @@ export async function loadGhost(fileName: string): Promise<GhostTrade[]> {
 
 /** 「いまの状態」なので追記ではなく丸ごと差し替える */
 export async function saveStateCsv(rows: string[], header: string, name: string): Promise<boolean> {
+  if (frozen) return false;
   try {
     const res = await fetch('/api/challenges', {
       method: 'POST',

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { INTERVALS } from '../lib/candles';
 import { formatClock } from '../lib/csv';
 import type { SoundChannel, SoundPrefs } from '../lib/sound';
+import { swatchOf, THEMES } from '../lib/themes';
 
 const SPEEDS = [1, 2, 5, 10, 30, 60, 120, 300];
 
@@ -28,7 +29,11 @@ type Props = {
   onRandom: () => void;
   sound: SoundPrefs;
   onSound: (ch: SoundChannel, on: boolean) => void;
+  theme: string;
+  onTheme: (id: string) => void;
   onHelp: () => void;
+  /** data/challenges を初期状態に戻す。成否を返す */
+  onReset: () => Promise<boolean>;
   files: string[];
   current: string;
   onSelectFile: (name: string) => void;
@@ -57,7 +62,10 @@ export function Controls({
   onRandom,
   sound,
   onSound,
+  theme,
+  onTheme,
   onHelp,
+  onReset,
   files,
   current,
   onSelectFile,
@@ -141,17 +149,6 @@ export function Controls({
           </select>
         </label>
 
-        <label className="check" title="昼休みなど約定の無い時間を早送りします">
-          <input
-            type="checkbox"
-            checked={skipGaps}
-            onChange={(e) => onSkipGaps(e.target.checked)}
-          />
-          <span>昼休みをスキップ</span>
-        </label>
-
-        <SoundMenu sound={sound} onSound={onSound} />
-
         <button
           type="button"
           className="chrome-x"
@@ -205,33 +202,68 @@ export function Controls({
           </div>
         </div>
 
-        <button type="button" className="btn help-btn" onClick={onHelp} title="各機能の説明を開く">
-          説明
-        </button>
+        <div className="seek-end">
+          <button type="button" className="btn help-btn" onClick={onHelp} title="各機能の説明を開く">
+            説明
+          </button>
+          <SettingsMenu
+            sound={sound}
+            onSound={onSound}
+            theme={theme}
+            onTheme={onTheme}
+            skipGaps={skipGaps}
+            onSkipGaps={onSkipGaps}
+            onReset={onReset}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-/** 音の種類ごとのオン・オフ。ボタンを押すとリストが開く */
-function SoundMenu({
+/**
+ * 設定。音・配色・再生・記録の初期化をここにまとめる。
+ * 説明ボタンの右に置いて、ふだん触らないものをツールバーから追い出している。
+ */
+function SettingsMenu({
   sound,
   onSound,
+  theme,
+  onTheme,
+  skipGaps,
+  onSkipGaps,
+  onReset,
 }: {
   sound: SoundPrefs;
   onSound: (ch: SoundChannel, on: boolean) => void;
+  theme: string;
+  onTheme: (id: string) => void;
+  skipGaps: boolean;
+  onSkipGaps: (v: boolean) => void;
+  onReset: () => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
+  /** リセットは2段階。押しただけでは消さない */
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+
+  // 閉じるときは確認も取り消す。開き直したときに「はい」が出たままにならないように
+  const close = useCallback(() => {
+    setOpen(false);
+    setConfirm(false);
+    setFailed(false);
+  }, []);
 
   // 外側をクリックしたら閉じる
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
+      if (!box.current?.contains(e.target as Node)) close();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
     };
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('keydown', onKey);
@@ -239,42 +271,122 @@ function SoundMenu({
       window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, close]);
 
-  const on = SOUND_ITEMS.filter((it) => sound[it.key]);
-  const label =
-    on.length === 0
-      ? 'なし'
-      : on.length === SOUND_ITEMS.length
-        ? 'すべて'
-        : on.map((it) => it.label).join('・');
+  const run = async () => {
+    setBusy(true);
+    setFailed(false);
+    const ok = await onReset();
+    // うまくいったときは画面を作り直すので、ここで戻す必要はない
+    if (ok) return;
+    setBusy(false);
+    setConfirm(false);
+    setFailed(true);
+  };
 
   return (
-    <div className="sound-menu" ref={box}>
+    <div className="set-menu" ref={box}>
       <button
         type="button"
-        className={`btn ghost sound-btn${on.length ? ' on' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        title="鳴らす音を選ぶ"
+        className={`btn set-btn${open ? ' on' : ''}`}
+        onClick={() => (open ? close() : setOpen(true))}
+        title="音・配色・記録の設定"
         aria-expanded={open}
       >
-        {on.length ? '🔊' : '🔇'} 音: {label} ▾
+        ⚙ 設定
       </button>
+
       {open && (
-        <div className="sound-pop" role="group" aria-label="鳴らす音">
-          {SOUND_ITEMS.map((it) => (
-            <label key={it.key} className="sound-row">
+        <div className="set-pop">
+          <section className="set-sec">
+            <h4>音</h4>
+            {SOUND_ITEMS.map((it) => (
+              <label key={it.key} className="sound-row">
+                <input
+                  type="checkbox"
+                  checked={sound[it.key]}
+                  onChange={(e) => onSound(it.key, e.target.checked)}
+                />
+                <span className="sound-label">{it.label}</span>
+                <span className="sound-note">{it.note}</span>
+              </label>
+            ))}
+          </section>
+
+          <section className="set-sec">
+            <h4>テーマ</h4>
+            {THEMES.map((t) => (
+              <button
+                type="button"
+                key={t.id}
+                className={`theme-row${t.id === theme ? ' on' : ''}`}
+                onClick={() => onTheme(t.id)}
+              >
+                <Swatch id={t.id} />
+                <span className="theme-label">{t.label}</span>
+                {t.id === theme && <span className="theme-now">いま</span>}
+              </button>
+            ))}
+          </section>
+
+          <section className="set-sec">
+            <h4>再生</h4>
+            <label className="sound-row">
               <input
                 type="checkbox"
-                checked={sound[it.key]}
-                onChange={(e) => onSound(it.key, e.target.checked)}
+                checked={skipGaps}
+                onChange={(e) => onSkipGaps(e.target.checked)}
               />
-              <span className="sound-label">{it.label}</span>
-              <span className="sound-note">{it.note}</span>
+              <span className="sound-label">昼休み</span>
+              <span className="sound-note">約定の無い時間を早送りする</span>
             </label>
-          ))}
+          </section>
+
+          <section className="set-sec">
+            <h4>記録</h4>
+            <p className="set-note">
+              data/challenges の記録（チャレンジ・取引・ルール・画面の設定）を消して、
+              はじめの状態に戻します。<b>元には戻せません。</b>
+            </p>
+            {confirm ? (
+              <div className="set-confirm">
+                <span>本当にリセットしますか？</span>
+                <button type="button" className="btn danger" disabled={busy} onClick={run}>
+                  {busy ? '消しています…' : 'はい、リセットする'}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={busy}
+                  onClick={() => setConfirm(false)}
+                >
+                  やめる
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="btn set-reset" onClick={() => setConfirm(true)}>
+                リセット
+              </button>
+            )}
+            {failed && (
+              <p className="set-fail">
+                消せませんでした。<code>npm run dev</code> で開いているか確かめてください。
+              </p>
+            )}
+          </section>
         </div>
       )}
     </div>
+  );
+}
+
+/** 色見本。テーマ定義の色をそのまま並べるので、いま当たっているテーマに引きずられない */
+function Swatch({ id }: { id: string }) {
+  return (
+    <span className="swatch">
+      {swatchOf(id).map((c, i) => (
+        <i key={i} style={{ background: c }} />
+      ))}
+    </span>
   );
 }

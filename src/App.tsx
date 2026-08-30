@@ -17,8 +17,9 @@ import { analyze, type ChallengeLog } from './lib/analysis';
 import { BotBoard } from './components/BotBoard';
 import type { Level } from './lib/bot';
 import { decodeCsv, formatClock, parseCsv } from './lib/csv';
-import { loadGhost, saveChallenge, type GhostTrade } from './lib/csvfile';
+import { loadGhost, resetChallenges, saveChallenge, type GhostTrade } from './lib/csvfile';
 import { DEFAULT_SETTINGS, type Box } from './lib/settings';
+import { applyTheme } from './lib/themes';
 import {
   setBgm,
   setLargeSize as setTapeLarge,
@@ -82,6 +83,18 @@ export default function App() {
   const sinkRef = useRef<ReplaySink | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [theme, setTheme] = useState(DEFAULT_SETTINGS.theme);
+  /**
+   * 配色を当てる。子より先に効かせたいので副作用ではなくレンダー中に呼ぶ。
+   * useEffect だと子（Chart）の副作用のほうが先に走ってしまい、
+   * 差し替わる前のCSS変数を読んでチャートだけ前の色のまま残る。
+   */
+  const themeApplied = useRef('');
+  if (themeApplied.current !== theme) {
+    themeApplied.current = theme;
+    applyTheme(theme);
+  }
+
   const ticks = useMemo(() => data?.ticks ?? [], [data]);
   /** 呼値の刻み。銘柄ごとに違うのでデータから割り出す */
   const tickSize = useMemo(() => detectTickSize(ticks.map((tk) => tk.price)), [ticks]);
@@ -128,6 +141,7 @@ export default function App() {
   const [level, setLevel] = useState<Level>(DEFAULT_SETTINGS.level);
   const [roundSec, setRoundSec] = useState(DEFAULT_SETTINGS.roundSec);
   const [matchBox, setMatchBox] = useState<Box>(DEFAULT_SETTINGS.matchBox);
+  const [matchFold, setMatchFold] = useState(DEFAULT_SETTINGS.matchFold);
   const [botBox, setBotBox] = useState<Box>(DEFAULT_SETTINGS.botBox);
   const [botOpen, setBotOpen] = useState(DEFAULT_SETTINGS.botOpen);
   const [botFold, setBotFold] = useState(DEFAULT_SETTINGS.botFold);
@@ -263,10 +277,12 @@ export default function App() {
     setLevel(saved.level);
     setRoundSec(saved.roundSec);
     setMatchBox(saved.matchBox);
+    setMatchFold(saved.matchFold);
     setBotBox(saved.botBox);
     setBotOpen(saved.botOpen);
     setBotFold(saved.botFold);
     setChrome({ header: saved.header, footer: saved.footer });
+    setTheme(saved.theme);
     setSpeed(saved.speed);
     setSkipGaps(saved.skipGaps);
     for (const k of ['bgm', 'tape', 'fill'] as const) setSoundChannel(k, saved.sound[k]);
@@ -288,11 +304,13 @@ export default function App() {
       level,
       roundSec,
       matchBox,
+      matchFold,
       botBox,
       botOpen,
       botFold,
       header: chrome.header,
       footer: chrome.footer,
+      theme,
     });
   }, [
     saveSettings,
@@ -306,11 +324,23 @@ export default function App() {
     level,
     roundSec,
     matchBox,
+    matchFold,
     botBox,
     botOpen,
     botFold,
     chrome,
+    theme,
   ]);
+
+  /**
+   * data/challenges を初期状態に戻す。設定もルールも起動時に読むので、
+   * 消したあとは画面ごと作り直すのがいちばん確実
+   */
+  const onReset = useCallback(async () => {
+    const ok = await resetChallenges();
+    if (ok) window.location.reload();
+    return ok;
+  }, []);
 
   /** 値動きの多い 9:00〜10:00 のどこかから再生し直す */
   const onRandom = useCallback(() => {
@@ -516,7 +546,7 @@ export default function App() {
 
   /** 何もないところを押したら畳む。ボタンや入力の上では効かせない */
   const blankClose = (k: 'header' | 'footer') => (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, input, select, label, a, .sound-menu')) return;
+    if ((e.target as HTMLElement).closest('button, input, select, label, a, .set-menu')) return;
     toggleChrome(k);
   };
 
@@ -587,6 +617,7 @@ export default function App() {
             indicators={indicators}
             ghost={views.ghost ? ghost : EMPTY_GHOST}
             interval={intervalSec}
+            theme={theme}
           />
         </section>
 
@@ -603,7 +634,11 @@ export default function App() {
           onAnalyze={onAnalyze}
           onOverall={() => setShowOverall(true)}
           toggles={views}
-          onToggleView={(k) => setViews((v) => ({ ...v, [k]: !v[k] }))}
+          onToggleView={(k) => {
+            // 畳んだまま閉じていても、出し直したら中身が見えるようにする
+            if (k === 'match') setMatchFold(false);
+            setViews((v) => ({ ...v, [k]: !v[k] }));
+          }}
           ghostCount={ghost.length}
           botOrders={botOrders}
           matchOn={match.active}
@@ -663,7 +698,10 @@ export default function App() {
           onRandom={onRandom}
           sound={sound}
           onSound={onSound}
+          theme={theme}
+          onTheme={setTheme}
           onHelp={() => setShowHelp(true)}
+          onReset={onReset}
           files={fileOptions}
           current={current}
           onSelectFile={onSelectFile}
@@ -698,6 +736,8 @@ export default function App() {
           onClose={() => setViews((v) => ({ ...v, match: false }))}
           box={matchBox}
           onBox={setMatchBox}
+          collapsed={matchFold}
+          onCollapse={setMatchFold}
           botOpen={botOpen}
           onBots={() => {
             setBotOpen(true);
@@ -713,6 +753,8 @@ export default function App() {
           ticks={ticks}
           startN={match.startN}
           nowN={match.nowN}
+          interval={intervalSec}
+          duration={match.duration}
           last={stats.last}
           box={botBox}
           onBox={setBotBox}

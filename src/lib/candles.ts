@@ -49,6 +49,20 @@ export function addTick(state: CandleState, tick: Tick): { candle: Candle; isNew
   return { candle, isNew: true };
 }
 
+/** ticks[from, to] を一括集計する。対戦のミニチャートなど、途中の区間だけ要るとき用 */
+export function buildCandlesRange(
+  ticks: Tick[],
+  from: number,
+  to: number,
+  interval: number,
+): Candle[] {
+  const state = createCandleState(interval);
+  const a = Math.max(0, from);
+  const b = Math.min(to, ticks.length - 1);
+  for (let i = a; i <= b; i++) addTick(state, ticks[i]);
+  return state.candles;
+}
+
 /** ticks[0, count) を一括集計する（シーク時の再構築用） */
 export function buildCandles(ticks: Tick[], count: number, interval: number): Candle[] {
   const state = createCandleState(interval);

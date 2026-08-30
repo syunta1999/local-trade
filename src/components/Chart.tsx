@@ -14,25 +14,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { ReplaySink } from '../hooks/useReplay';
-import {
-  BB_BAND,
-  BB_MID,
-  GHOST,
-  GHOST_LOSE,
-  GHOST_WIN,
-  BG,
-  BORDER,
-  DOWN,
-  DOWN_FILL,
-  GRID,
-  MA_COLORS,
-  MA_FALLBACK,
-  RSI_GUIDE,
-  RSI_LINE,
-  TEXT,
-  UP,
-  UP_FILL,
-} from '../lib/colors';
+import { C, refreshPalette } from '../lib/colors';
 import {
   bollingerAt,
   bollingerSeries,
@@ -45,7 +27,7 @@ import {
   type RsiState,
 } from '../lib/indicators';
 import type { GhostTrade } from '../lib/csvfile';
-import type { IndicatorConfig } from '../lib/types';
+import type { Candle, IndicatorConfig } from '../lib/types';
 
 /** 初期表示で見せる本数 */
 const VISIBLE_BARS = 120;
@@ -64,9 +46,11 @@ type Props = {
   ghost: GhostTrade[];
   /** 足の秒数。ゴーストの時刻を足に丸めるのに使う */
   interval: number;
+  /** 配色テーマのid。変わったら色を読み直して塗り直す */
+  theme: string;
 };
 
-export function Chart({ ref, indicators, ghost, interval }: Props) {
+export function Chart({ ref, indicators, ghost, interval, theme }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -87,31 +71,35 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
 
   /** rAF ループ（レンダーの外）から最新の設定を読むための控え */
   const cfgRef = useRef(indicators);
+  /** いま出しているローソク。テーマを変えたときに色だけ塗り直すのに使う */
+  const dataRef = useRef<Candle[]>([]);
+  const themeRef = useRef(theme);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const maSeries = maRef.current;
+    refreshPalette();
 
     const chart = createChart(el, {
       autoSize: true,
       layout: {
-        background: { color: BG },
-        textColor: TEXT,
+        background: { color: C.bg },
+        textColor: C.text,
         fontSize: 11,
         attributionLogo: false,
-        panes: { separatorColor: BORDER, separatorHoverColor: 'rgba(255,255,255,0.08)' },
+        panes: { separatorColor: C.border, separatorHoverColor: 'rgba(255,255,255,0.08)' },
       },
       grid: {
-        vertLines: { color: GRID },
-        horzLines: { color: GRID },
+        vertLines: { color: C.grid },
+        horzLines: { color: C.grid },
       },
       rightPriceScale: {
-        borderColor: BORDER,
+        borderColor: C.border,
         scaleMargins: { top: 0.08, bottom: 0.26 },
       },
       timeScale: {
-        borderColor: BORDER,
+        borderColor: C.border,
         timeVisible: true,
         secondsVisible: true,
         rightOffset: 6,
@@ -124,19 +112,19 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
     });
 
     const candle = chart.addSeries(CandlestickSeries, {
-      upColor: UP,
-      downColor: DOWN,
-      borderUpColor: UP,
-      borderDownColor: DOWN,
-      wickUpColor: UP,
-      wickDownColor: DOWN,
+      upColor: C.up,
+      downColor: C.down,
+      borderUpColor: C.up,
+      borderDownColor: C.down,
+      wickUpColor: C.up,
+      wickDownColor: C.down,
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
     });
 
     const volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
       priceScaleId: '',
-      color: UP_FILL,
+      color: C.upFill,
     });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
@@ -157,6 +145,37 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
       rsiStateRef.current = null;
     };
   }, []);
+
+  // テーマを切り替えたら、CSS変数を読み直して枠とローソクに当て直す
+  useEffect(() => {
+    const chart = chartRef.current;
+    const cs = candleRef.current;
+    const vs = volumeRef.current;
+    if (!chart || !cs || !vs) return;
+    refreshPalette();
+    chart.applyOptions({
+      layout: { background: { color: C.bg }, textColor: C.text },
+      grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
+      rightPriceScale: { borderColor: C.border },
+      timeScale: { borderColor: C.border },
+    });
+    cs.applyOptions({
+      upColor: C.up,
+      downColor: C.down,
+      borderUpColor: C.up,
+      borderDownColor: C.down,
+      wickUpColor: C.up,
+      wickDownColor: C.down,
+    });
+    // 出来高は棒ごとに色を持つので、いまのデータで塗り直す
+    vs.setData(
+      dataRef.current.map((c) => ({
+        time: c.time as UTCTimestamp,
+        value: c.volume,
+        color: c.close >= c.open ? C.upFill : C.downFill,
+      })),
+    );
+  }, [theme]);
 
   /**
    * 前回のトレードをマーカーで重ねる。
@@ -184,7 +203,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
           time: inTime as UTCTimestamp,
           position: buy ? 'belowBar' : 'aboveBar',
           shape: buy ? 'arrowUp' : 'arrowDown',
-          color: GHOST,
+          color: C.ghost,
           text: buy ? '前回 買' : '前回 売',
           size: 1,
         });
@@ -194,7 +213,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
           time: outTime as UTCTimestamp,
           position: buy ? 'aboveBar' : 'belowBar',
           shape: 'circle',
-          color: g.pnl >= 0 ? GHOST_WIN : GHOST_LOSE,
+          color: g.pnl >= 0 ? C.ghostWin : C.ghostLose,
           size: 1,
         });
       }
@@ -298,6 +317,26 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
     if (!chart) return;
     cfgRef.current = indicators;
 
+    // テーマが変わったときは、色を持ったまま残っている線を一度捨てる
+    if (themeRef.current !== theme) {
+      themeRef.current = theme;
+      for (const [, s] of maRef.current) chart.removeSeries(s);
+      maRef.current.clear();
+      if (bbRef.current) {
+        chart.removeSeries(bbRef.current.mid);
+        chart.removeSeries(bbRef.current.upper);
+        chart.removeSeries(bbRef.current.lower);
+        bbRef.current = null;
+      }
+      if (rsiRef.current) {
+        const panes = chart.panes();
+        chart.removeSeries(rsiRef.current);
+        rsiRef.current = null;
+        rsiStateRef.current = null;
+        if (panes.length > 1) chart.removePane(1);
+      }
+    }
+
     // 移動平均: 選択されている本数だけを残す
     for (const [period, s] of maRef.current) {
       if (indicators.maPeriods.includes(period)) continue;
@@ -309,7 +348,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
       maRef.current.set(
         period,
         chart.addSeries(LineSeries, {
-          color: MA_COLORS[period] ?? MA_FALLBACK,
+          color: C.ma(period),
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -322,7 +361,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
     if (indicators.bb.on && !bbRef.current) {
       const band = () =>
         chart.addSeries(LineSeries, {
-          color: BB_BAND,
+          color: C.bbBand,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -332,7 +371,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
         upper: band(),
         lower: band(),
         mid: chart.addSeries(LineSeries, {
-          color: BB_MID,
+          color: C.bbMid,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           priceLineVisible: false,
@@ -353,7 +392,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
       const s = chart.addSeries(
         LineSeries,
         {
-          color: RSI_LINE,
+          color: C.rsiLine,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: true,
@@ -365,7 +404,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
       for (const price of [70, 30]) {
         s.createPriceLine({
           price,
-          color: RSI_GUIDE,
+          color: C.rsiGuide,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -374,7 +413,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
       }
       // 0〜100 に固定しているので余白を詰めてペインを目一杯使う
       s.priceScale().applyOptions({
-        borderColor: BORDER,
+        borderColor: C.border,
         scaleMargins: { top: 0.08, bottom: 0.08 },
       });
       pane.setHeight(RSI_PANE_HEIGHT);
@@ -388,7 +427,8 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
     }
 
     redrawIndicators();
-  }, [indicators, redrawIndicators]);
+    // theme が変わると上で指標を作り直しているので、新しい色が乗る
+  }, [indicators, theme, redrawIndicators]);
 
   useImperativeHandle<ReplaySink | null, ReplaySink>(
     ref,
@@ -397,6 +437,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
         const cs = candleRef.current;
         const vs = volumeRef.current;
         if (!cs || !vs) return;
+        dataRef.current = candles;
         cs.setData(
           candles.map((c) => ({
             time: c.time as UTCTimestamp,
@@ -410,7 +451,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
           candles.map((c) => ({
             time: c.time as UTCTimestamp,
             value: c.volume,
-            color: c.close >= c.open ? UP_FILL : DOWN_FILL,
+            color: c.close >= c.open ? C.upFill : C.downFill,
           })),
         );
         barsRef.current = {
@@ -450,7 +491,7 @@ export function Chart({ ref, indicators, ghost, interval }: Props) {
         volumeRef.current?.update({
           time: c.time as UTCTimestamp,
           value: c.volume,
-          color: c.close >= c.open ? UP_FILL : DOWN_FILL,
+          color: c.close >= c.open ? C.upFill : C.downFill,
         });
         updateIndicatorsLast();
       },

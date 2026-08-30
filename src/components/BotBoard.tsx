@@ -1,15 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDragBox } from '../hooks/useDragBox';
 import type { BotTrade, BotView } from '../lib/bot';
-import { DOWN, UP } from '../lib/colors';
+import { INTERVALS, buildCandlesRange } from '../lib/candles';
 import { formatClock } from '../lib/csv';
 import type { Box } from '../lib/settings';
-import type { Tick } from '../lib/types';
+import type { Candle, Tick } from '../lib/types';
 
-/** ミニチャートの内部座標。preserveAspectRatio="none" で枠に合わせて伸ばす */
-const VW = 300;
-const VH = 56;
-/** 値動きの線に使う点の数。ティックが何万本あってもここまで間引く */
-const SPARK_POINTS = 220;
+/**
+ * ミニチャートの高さ(px)。横幅は枠に合わせて実測し、viewBox をそのピクセル数にする。
+ * 決め打ちの viewBox を引き伸ばすとローソクが横に潰れて読めなくなるため。
+ */
+const VH = 64;
+/** 枠の内側の余白（.botb-body の padding と .botp の枠線ぶん） */
+const ART_PAD = 22;
+/** ローソク1本ぶんの持ち場の最小幅(px)。これ以上は詰めない */
+const MIN_SLOT = 2;
+/** ローソクの実体の最大幅(px) */
+const MAX_BODY = 20;
+/** ミニチャートに最低これだけは本数がほしい */
+const MIN_BARS = 8;
 
 const nf = new Intl.NumberFormat('ja-JP');
 const money = (n: number) => `${n > 0 ? '+' : ''}${nf.format(Math.round(n))}`;
@@ -21,6 +30,10 @@ type Props = {
   /** ラウンドの範囲（ティックの通し番号） */
   startN: number;
   nowN: number;
+  /** 足の秒数。メインのチャートと揃える */
+  interval: number;
+  /** ラウンドの長さ(秒)。横軸の枠を最初から取るのに使う */
+  duration: number;
   last: number;
   box: Box;
   onBox: (b: Box) => void;
@@ -29,25 +42,29 @@ type Props = {
   onClose: () => void;
 };
 
-/** ラウンド中の値動きを間引いて拾う */
-function spark(ticks: Tick[], from: number, to: number) {
-  const a = Math.max(0, Math.min(from, ticks.length - 1));
-  const b = Math.max(a, Math.min(to, ticks.length - 1));
-  const span = b - a;
-  if (span < 1) return { pts: [] as { n: number; price: number }[], lo: 0, hi: 0 };
-  const step = Math.max(1, Math.floor(span / SPARK_POINTS));
-  const pts: { n: number; price: number }[] = [];
+/**
+ * 足の秒数を決める。基本はメインの設定と同じだが、ラウンドに対して粗すぎて
+ * 数本しか立たないときだけ、MIN_BARS 本に届く細かさまで落とす
+ */
+function fitInterval(interval: number, duration: number) {
+  if (duration <= 0) return interval;
+  for (const iv of INTERVALS) {
+    if (iv.seconds <= interval && duration / iv.seconds >= MIN_BARS) return iv.seconds;
+  }
+  return INTERVALS[INTERVALS.length - 1].seconds;
+}
+
+/** ラウンドの範囲をローソク足にする */
+function roundBars(ticks: Tick[], from: number, to: number, interval: number) {
+  if (ticks.length === 0 || to <= from) return { bars: [] as Candle[], lo: 0, hi: 0, interval };
+  const bars = buildCandlesRange(ticks, from, to, interval);
   let lo = Infinity;
   let hi = -Infinity;
-  for (let i = a; i <= b; i += step) {
-    const p = ticks[i].price;
-    pts.push({ n: i, price: p });
-    if (p < lo) lo = p;
-    if (p > hi) hi = p;
+  for (const c of bars) {
+    if (c.low < lo) lo = c.low;
+    if (c.high > hi) hi = c.high;
   }
-  const lastTick = ticks[b];
-  if (pts[pts.length - 1]?.n !== b) pts.push({ n: b, price: lastTick.price });
-  return { pts, lo, hi };
+  return { bars, lo, hi, interval };
 }
 
 export function BotBoard({
@@ -55,6 +72,8 @@ export function BotBoard({
   ticks,
   startN,
   nowN,
+  interval,
+  duration,
   last,
   box,
   onBox,
@@ -63,38 +82,7 @@ export function BotBoard({
   onClose,
 }: Props) {
   const el = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ dx: number; dy: number } | null>(null);
-  const boxRef = useRef(box);
-  useEffect(() => {
-    boxRef.current = box;
-  }, [box]);
-
-  const onDown = useCallback((e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    drag.current = { dx: e.clientX - boxRef.current.x, dy: e.clientY - boxRef.current.y };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }, []);
-
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      onBox({
-        ...boxRef.current,
-        x: Math.max(0, Math.min(window.innerWidth - 160, e.clientX - d.dx)),
-        y: Math.max(0, Math.min(window.innerHeight - 30, e.clientY - d.dy)),
-      });
-    };
-    const up = () => {
-      drag.current = null;
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-  }, [onBox]);
+  const { boxRef, onDown, movedRef } = useDragBox(box, onBox, 160, 30);
 
   // 初回の置き場所と、画面の外に出ていたときの引き戻し
   useEffect(() => {
@@ -110,7 +98,7 @@ export function BotBoard({
       y: Math.max(8, Math.min(window.innerHeight - 30, y)),
     };
     if (fixed.x !== b.x || fixed.y !== b.y) onBox(fixed);
-  }, [onBox]);
+  }, [onBox, boxRef]);
 
   // 大きさは CSS の resize がインラインに書くので、当てるのは畳み方が変わったときだけ。
   // 畳んでいる間は中身に合わせたいので、指定そのものを外す
@@ -124,7 +112,7 @@ export function BotBoard({
     }
     e.style.width = boxRef.current.w ? `${boxRef.current.w}px` : '';
     e.style.height = boxRef.current.h ? `${boxRef.current.h}px` : '';
-  }, [collapsed]);
+  }, [collapsed, boxRef]);
 
   useEffect(() => {
     const e = el.current;
@@ -138,9 +126,25 @@ export function BotBoard({
     });
     ro.observe(e);
     return () => ro.disconnect();
-  }, [collapsed, onBox]);
+  }, [collapsed, onBox, boxRef]);
 
-  const line = useMemo(() => spark(ticks, startN, nowN), [ticks, startN, nowN]);
+  const barSec = fitInterval(interval, duration);
+  const barLabel = INTERVALS.find((iv) => iv.seconds === barSec)?.label ?? '';
+  const line = useMemo(
+    () => roundBars(ticks, startN, nowN, barSec),
+    [ticks, startN, nowN, barSec],
+  );
+
+  // 図の横幅を実測して viewBox に使う。枠を広げたぶんローソクの本数が同じまま太らない
+  const body = useRef<HTMLDivElement>(null);
+  const [artW, setArtW] = useState(520);
+  useEffect(() => {
+    const e = body.current;
+    if (!e || collapsed) return;
+    const ro = new ResizeObserver(() => setArtW(Math.max(120, e.clientWidth - ART_PAD)));
+    ro.observe(e);
+    return () => ro.disconnect();
+  }, [collapsed]);
 
   const style = { left: box.x, top: box.y > 0 ? box.y : undefined };
 
@@ -150,9 +154,12 @@ export function BotBoard({
         <header onPointerDown={onDown}>
           <button
             type="button"
-            className="botb-grip"
-            onClick={() => onCollapse(false)}
-            title="botの売買を開く"
+            className="grip botb-grip"
+            onClick={() => {
+              // 動かしただけのときは開かない
+              if (!movedRef.current) onCollapse(false);
+            }}
+            title="押すと開く / 掴んで移動"
           >
             botの売買
             {bots.map((b) => (
@@ -168,7 +175,7 @@ export function BotBoard({
     <div className="botb" ref={el} style={style}>
       <header onPointerDown={onDown}>
         <strong>botの売買</strong>
-        <span className="botb-hint">枠を掴んで移動 / 右下で大きさ変更</span>
+        <span className="botb-hint">{barLabel}足 · 枠を掴んで移動 / 右下で大きさ変更</span>
         <button type="button" className="x" onClick={() => onCollapse(true)} title="細く畳む">
           —
         </button>
@@ -177,29 +184,29 @@ export function BotBoard({
         </button>
       </header>
 
-      <div className="botb-body">
+      <div className="botb-body" ref={body}>
         {bots.length === 0 && <p className="botb-empty">対戦を始めるとここに出ます。</p>}
         {bots.map((b) => (
-          <BotPanel key={b.id} bot={b} line={line} startN={startN} nowN={nowN} last={last} />
+          <BotPanel key={b.id} bot={b} line={line} width={artW} duration={duration} last={last} />
         ))}
       </div>
     </div>
   );
 }
 
-type Line = ReturnType<typeof spark>;
+type Bars = ReturnType<typeof roundBars>;
 
 function BotPanel({
   bot,
   line,
-  startN,
-  nowN,
+  width,
+  duration,
   last,
 }: {
   bot: BotView;
-  line: Line;
-  startN: number;
-  nowN: number;
+  line: Bars;
+  width: number;
+  duration: number;
   last: number;
 }) {
   const open: BotTrade | null = bot.side
@@ -210,22 +217,47 @@ function BotPanel({
         entryAt: bot.since,
         exitAt: 0,
         entryN: bot.sinceN,
-        exitN: nowN,
+        exitN: 0,
         qty: bot.qty,
         pnl: bot.side === 'long' ? (last - bot.avg) * bot.qty : (bot.avg - last) * bot.qty,
       }
     : null;
   const total = bot.realized + (open?.pnl ?? 0);
 
+  const all = [...bot.trades, ...(open ? [open] : [])];
+
   // 売買した値段も縦軸に入れる。枠外に線が飛び出さないようにするため
   let lo = line.lo;
   let hi = line.hi;
-  for (const t of [...bot.trades, ...(open ? [open] : [])]) {
+  for (const t of all) {
     lo = Math.min(lo, t.entry, t.exit);
     hi = Math.max(hi, t.entry, t.exit);
   }
   const span = Math.max(hi - lo, 1e-9);
-  const x = (n: number) => ((Math.min(Math.max(n, startN), nowN) - startN) / Math.max(nowN - startN, 1)) * VW;
+
+  // 横軸はラウンドの長さぶんの持ち場を最初から取っておく。
+  // ある本数だけで幅を割ると、2本しかない間は端と端に離れて置かれ、
+  // 1本増えるたびに全部が動いてしまう
+  const planned = Math.ceil(duration / line.interval) + 1;
+  const slots = Math.max(line.bars.length, Math.min(planned, Math.floor(width / MIN_SLOT)), 1);
+  const slot = width / slots;
+  // 実体は持ち場をはみ出させない。本数が多いときに隣と重なって塗り潰れるため
+  const bw = Math.min(Math.max(slot * 0.62, 1.5), slot, MAX_BODY);
+  const lastBarTime = line.bars[line.bars.length - 1]?.time ?? 0;
+  // 時刻から足の位置を引く。値のつかない足は作られない（昼休みなど）ので、
+  // 割り算では本数とずれる
+  const xOf = (t: number) => {
+    const bars = line.bars;
+    if (bars.length === 0) return slot / 2;
+    let a = 0;
+    let b = bars.length - 1;
+    while (a < b) {
+      const mid = (a + b + 1) >> 1;
+      if (bars[mid].time <= t) a = mid;
+      else b = mid - 1;
+    }
+    return (a + 0.5) * slot;
+  };
   const y = (p: number) => VH - 3 - ((p - lo) / span) * (VH - 6);
 
   const rows = [...bot.trades].reverse();
@@ -242,34 +274,71 @@ function BotPanel({
         <span className={`botp-total ${tone(total)}`}>{money(total)}</span>
       </div>
 
-      <svg className="botp-art" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none" aria-hidden>
-        {line.pts.length > 1 && (
-          <polyline
-            points={line.pts.map((p) => `${x(p.n).toFixed(1)},${y(p.price).toFixed(1)}`).join(' ')}
-            fill="none"
-            stroke="#4d5765"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-        {/* 建てた値段から返した値段まで、1本の線で結ぶ。勝ちは赤 / 負けは青 */}
-        {[...bot.trades, ...(open ? [open] : [])].map((t, i) => {
+      <svg className="botp-art" viewBox={`0 0 ${width} ${VH}`} aria-hidden>
+        {/* ローソク足。持ち場はラウンドぶん先に取ってあるので、増えても位置は動かない */}
+        {line.bars.map((c, i) => {
+          const up = c.close >= c.open;
+          const col = up ? 'var(--up)' : 'var(--down)';
+          const cx = (i + 0.5) * slot;
+          const yo = y(c.open);
+          const yc = y(c.close);
+          return (
+            <g key={c.time}>
+              <line
+                x1={cx}
+                y1={y(c.high)}
+                x2={cx}
+                y2={y(c.low)}
+                stroke={col}
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+              <rect
+                x={cx - bw / 2}
+                y={Math.min(yo, yc)}
+                width={bw}
+                height={Math.max(Math.abs(yc - yo), 0.8)}
+                fill={col}
+              />
+            </g>
+          );
+        })}
+        {/* 建てた値段から返した値段まで1本の線で結ぶ。勝ちは赤 / 負けは青 */}
+        {all.map((t, i) => {
           const live = t.exitAt === 0;
-          const c = t.pnl >= 0 ? UP : DOWN;
+          const c = t.pnl >= 0 ? 'var(--up)' : 'var(--down)';
+          const x1 = xOf(t.entryAt);
+          const x2 = live ? xOf(lastBarTime) : xOf(t.exitAt);
           return (
             <g key={i}>
               <line
-                x1={x(t.entryN)}
+                x1={x1}
                 y1={y(t.entry)}
-                x2={x(t.exitN)}
+                x2={x2}
                 y2={y(t.exit)}
                 stroke={c}
-                strokeWidth="1.6"
+                strokeWidth="1.4"
                 strokeDasharray={live ? '3 2' : undefined}
                 vectorEffect="non-scaling-stroke"
               />
-              <circle cx={x(t.entryN)} cy={y(t.entry)} r="2.4" fill={bot.color} />
-              {!live && <circle cx={x(t.exitN)} cy={y(t.exit)} r="2.4" fill={c} />}
+              <circle
+                cx={x1}
+                cy={y(t.entry)}
+                r="2.6"
+                fill={bot.color}
+                stroke="var(--bg)"
+                strokeWidth="0.8"
+              />
+              {!live && (
+                <circle
+                  cx={x2}
+                  cy={y(t.exit)}
+                  r="2.6"
+                  fill={c}
+                  stroke="var(--bg)"
+                  strokeWidth="0.8"
+                />
+              )}
             </g>
           );
         })}

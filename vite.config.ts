@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
@@ -133,6 +133,23 @@ function challengeApi(): Plugin {
                 files[n] = await readFile(join(LOG_DIR, n), 'utf8').catch(() => '')
               }
               send(200, { files })
+            })
+            .catch((e) => send(500, { error: String(e) }))
+          return
+        }
+
+        // DELETE /api/challenges … 記録置き場をまるごと初期状態（ファイル無し）に戻す。
+        // 消したあとはクライアントが読み直し、既定値から書き起こす
+        if (req.method === 'DELETE' && (path === '/' || path === '')) {
+          readdir(LOG_DIR)
+            .catch(() => [] as string[])
+            .then(async (names) => {
+              const removed: string[] = []
+              for (const n of names.filter((x) => safe(x))) {
+                await unlink(join(LOG_DIR, n)).catch(() => {})
+                removed.push(n)
+              }
+              send(200, { removed })
             })
             .catch((e) => send(500, { error: String(e) }))
           return
