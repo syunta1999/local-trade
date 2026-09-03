@@ -176,22 +176,29 @@ export function downloadChallenge(log: ChallengeLog, a: Analysis): void {
 
 // ---- 溜めた記録の読み出し ------------------------------------------------
 
-/** チャレンジ1回ぶんの要約（一覧表示と削除に使う） */
+/** チャレンジ1回ぶんの要約（一覧表示・1回ぶんに絞った集計・削除に使う） */
 export type ChallengeSummary = {
   id: string;
   startedAt: string;
   symbol: string;
   dateLabel: string;
   fileName: string;
+  /** セッション内の開始 / 終了時刻 "09:00:00" */
+  fromClock: string;
+  toClock: string;
   trades: number;
   pnl: number;
   seeks: number;
+  cancelled: number;
 };
+
+/** 記録から戻した1取引。どのチャレンジのものかを持つので、1回ぶんに絞って集計できる */
+export type StoredExcursion = Excursion & { challengeId: string };
 
 export type StoredChallenges = {
   summaries: ChallengeSummary[];
   /** 全チャレンジの取引。MAE/MFE も記録済みなのでティック無しで集計できる */
-  items: Excursion[];
+  items: StoredExcursion[];
   /** 取消の合計 */
   cancelled: number;
 };
@@ -239,17 +246,17 @@ export async function loadChallenges(): Promise<StoredChallenges | null> {
     symbol: r['銘柄'],
     dateLabel: r['日付'],
     fileName: r['ファイル'],
+    fromClock: r['開始時刻'],
+    toClock: r['終了時刻'],
     trades: toNum(r['取引数']),
     pnl: toNum(r['総損益']),
     seeks: toNum(r['シーク数']),
+    cancelled: toNum(r['取消数']),
   }));
-  const cancelled = parseCsvRows(files[CHALLENGE_FILE] ?? '').reduce(
-    (a, r) => a + toNum(r['取消数']),
-    0,
-  );
+  const cancelled = summaries.reduce((a, s) => a + s.cancelled, 0);
 
   let n = 0;
-  const items: Excursion[] = parseCsvRows(files[CHALLENGE_TRADES_FILE] ?? '').map((r) => {
+  const items: StoredExcursion[] = parseCsvRows(files[CHALLENGE_TRADES_FILE] ?? '').map((r) => {
     const side: PositionSide = r['方向'] === '売' ? 'short' : 'long';
     const qty = toNum(r['数量']);
     const date = r['日付'];
@@ -270,7 +277,7 @@ export async function loadChallenges(): Promise<StoredChallenges | null> {
     };
     const mfe = toNum(r['MFE']);
     const mae = toNum(r['MAE']);
-    return { trade, mae, mfe, maeMoney: mae * qty, mfeMoney: mfe * qty };
+    return { challengeId: r['チャレンジID'], trade, mae, mfe, maeMoney: mae * qty, mfeMoney: mfe * qty };
   });
 
   return { summaries, items, cancelled };

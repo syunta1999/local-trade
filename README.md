@@ -38,7 +38,7 @@ npm run dev     # http://localhost:5173/
 | 説明 | 右下の「説明」から各機能の解説。図つきで株がはじめてでも読める |
 | 解説チップ | チャレンジ / 分析 / 総合 / ルール / ゴースト / お題 にカーソルを0.5秒重ねると解説が出る |
 | 対戦 | 3体のbotと同じ相場・同じ約定ルールで損益を競う。10 / 30 / 60分のラウンド制 |
-| 配色 | midnight / spring / summer / fall / winter の5テーマ。チャートも板も同時に切り替わる |
+| 配色 | midnight / spring などの無地に、super mario / doraemon / sunset drive など柄物も。チャートも板も同時に切り替わる |
 | 設定の記憶 | インジケーター・足・倍速・音・歩み値・対戦・配色をCSVに保存し、次回そのまま復元 |
 | 画面を広く | ヘッダーとフッターを畳める。全部畳むとチャートの高さが約16%増える |
 | 今日のお題 | 日替わりの目標。達成すると緑になる |
@@ -94,7 +94,7 @@ src/
   components/Match.tsx        対戦の設定・スコアボード・決着画面（移動・リサイズ可）
   components/BotBoard.tsx     botごとのミニチャートと売買明細（移動・リサイズ・折りたたみ可）
   lib/settings.ts             画面の設定の読み書き
-  lib/themes.ts               配色テーマ（5つ）
+  lib/themes.ts               配色テーマと、チャートの後ろに敷く柄
   hooks/useSettings.ts        設定CSVの読み込みと書き戻し
   lib/bot.ts                  対戦botの判断（Reactに依存しない）
   hooks/useMatch.ts           ラウンドの進行とbotの駆動
@@ -524,7 +524,11 @@ botごとに小さな**ローソク足**があり（足の種類はメインの�
 
 ## 配色テーマ
 
-midnight（既定）/ spring / summer / fall / winter
+無地: midnight（既定）/ spring / summer / fall / winter / crazy rainbow / wild jungle /
+ghost mansion / happy purple / japan / usa / god zeus / rising sun / casino / death metal /
+egypt / atlantis / random
+
+柄物: super mario / doraemon / sunset drive / brick alley / to the moon / lava / retro RPG / 億り人
 
 色は **index.css の CSS変数だけ**が出どころ。面や文字の階調は `color-mix()` で
 `--bg` と `--fg` から作っているので、テーマが指定するのは実質7色だけで済む。
@@ -544,6 +548,21 @@ midnight（既定）/ spring / summer / fall / winter
 
 配色の適用は**副作用ではなくレンダー中**に行う。`useEffect` だと子（Chart）の副作用のほうが
 先に走ってしまい、差し替わる前のCSS変数を読んでチャートだけ前の色のまま残る。
+
+### 柄物
+
+柄は `--bg-art` に `background` の層をそのまま書く（グラデーションや `url()`、先頭が手前）。
+`.chart-wrap` が `background: var(--bg-art), var(--bg)` で敷き、チャート本体（canvas）の背景は
+透明にしてあるので、ローソクの後ろに柄が透ける。板や歩み値は不透明なパネルのままにして、
+数字の読みやすさは守る。
+
+レンガや星のように CSS のグラデーションで書きにくい絵は、SVG を data URI にして `url()` で渡す
+（`lib/themes.ts` の `brickTile` / `dotTile`）。点の座標は固定で、乱数は使わない。
+チャートの下端はいつも時間軸なので、地面のような絵は `AXIS_H` ぶん浮かせてある。
+ローソクを読ませるため、柄は地と近い明るさにとどめ、派手な色は小さな絵に限る。
+
+retro RPG だけは色に加えて CSS も持つ（`[data-theme='retro-rpg']`）。角を落として白い枠にし、
+チャートを二重線の窓で囲む。
 
 ## 画面を広く使う
 

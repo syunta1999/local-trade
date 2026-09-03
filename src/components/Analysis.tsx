@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis as Result, ChallengeLog, SideStats } from '../lib/analysis';
 import { analyze, analyzeFrom } from '../lib/analysis';
 import { formatClock } from '../lib/csv';
@@ -30,18 +30,23 @@ function dur(sec: number): string {
 }
 
 type ViewProps = {
+  title: string;
   result: Result;
   subtitle: string;
   /** 数字を鵜呑みにできない事情。空なら出さない */
   warn?: string;
   onSave?: () => void;
   onClose: () => void;
+  /** 見出しの右に足すボタン（総合で1回ぶんに絞っているときの「すべてに戻す」など） */
+  actions?: React.ReactNode;
+  /** スクロールする本文。呼び出し側が先頭に戻したいときに使う */
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   /** 総合表示のときだけ足すチャレンジ一覧など */
   children?: React.ReactNode;
 };
 
 /** 集計結果の見せ方。1回ぶんでも総合でも同じ画面を使う */
-function AnalysisView({ result: a, subtitle, warn, onSave, onClose, children }: ViewProps) {
+function AnalysisView({ title, result: a, subtitle, warn, onSave, onClose, actions, bodyRef, children }: ViewProps) {
   const totalMfe = a.exec.items.reduce((x, i) => x + i.mfeMoney, 0);
 
   return (
@@ -49,10 +54,11 @@ function AnalysisView({ result: a, subtitle, warn, onSave, onClose, children }: 
       <div className="an" onClick={(e) => e.stopPropagation()}>
         <header className="an-head">
           <div>
-            <strong>{onSave ? '分析結果' : '総合分析'}</strong>
+            <strong>{title}</strong>
             <span className="an-sub">{subtitle}</span>
           </div>
           <div className="an-acts">
+            {actions}
             {onSave && (
               <button type="button" className="mini" onClick={onSave}>
                 CSV保存
@@ -64,7 +70,7 @@ function AnalysisView({ result: a, subtitle, warn, onSave, onClose, children }: 
           </div>
         </header>
 
-        <div className="an-body">
+        <div className="an-body" ref={bodyRef}>
           {a.all.count === 0 ? (
             <>
               <p className="an-empty">まだ取引がありません。板で発注して返済すると記録されます。</p>
@@ -216,6 +222,7 @@ export function Analysis({ log, ticks, tickSize, onClose }: Props) {
 
   return (
     <AnalysisView
+      title="分析結果"
       result={a}
       subtitle={`${log.symbol ?? '—'} · ${log.dateLabel} · ${formatClock(log.fromClock)}〜${formatClock(log.toClock)} · ${log.fileName}`}
       warn={warn}
@@ -225,12 +232,17 @@ export function Analysis({ log, ticks, tickSize, onClose }: Props) {
   );
 }
 
-/** これまでのチャレンジを全部まとめたもの。一覧から削除もできる */
+/**
+ * これまでのチャレンジを全部まとめたもの。
+ * 一覧の行を選ぶとその1回ぶんだけの集計に切り替わる。一覧から削除もできる。
+ */
 export function Overall({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<StoredChallenges | null>(null);
   const [loading, setLoading] = useState(true);
+  /** 一覧で選んだチャレンジ。null なら全部を合算して見る */
   const [picked, setPicked] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const next = await loadChallenges();
@@ -251,10 +263,25 @@ export function Overall({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const a = useMemo(
-    () => analyzeFrom(data?.items ?? [], data?.cancelled ?? 0, 1),
-    [data],
-  );
+  const list = data?.summaries ?? [];
+  const selected = picked ? (list.find((c) => c.id === picked) ?? null) : null;
+
+  const a = useMemo(() => {
+    const items = data?.items ?? [];
+    if (!selected) return analyzeFrom(items, data?.cancelled ?? 0, 1);
+    return analyzeFrom(
+      items.filter((i) => i.challengeId === selected.id),
+      selected.cancelled,
+      1,
+    );
+  }, [data, selected]);
+
+  /** 見る対象を切り替える。上の数字が入れ替わったと分かるように本文を先頭へ戻す */
+  const pick = (id: string | null) => {
+    setPicked(id);
+    setConfirming(false);
+    bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (loading) {
     return (
@@ -268,9 +295,9 @@ export function Overall({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const list = data?.summaries ?? [];
-  const symbols = [...new Set(list.map((c) => c.symbol).filter(Boolean))];
-  const seeks = list.reduce((x, c) => x + c.seeks, 0);
+  // 1回ぶんに絞っているときは銘柄が混ざらないし、シークもそのチャレンジのぶんだけ
+  const symbols = selected ? [] : [...new Set(list.map((c) => c.symbol).filter(Boolean))];
+  const seeks = selected ? selected.seeks : list.reduce((x, c) => x + c.seeks, 0);
   const thin = a.all.count > 0 && a.all.count < MIN_SAMPLE;
 
   const remove = async () => {
@@ -284,17 +311,39 @@ export function Overall({ onClose }: { onClose: () => void }) {
   const warn = [
     !data ? '記録を読み込めませんでした（開発サーバーで動かしてください）。' : '',
     thin ? `取引が${a.all.count}件しかありません。${MIN_SAMPLE}件を超えるまで数字は偶然に振り回されます。` : '',
-    seeks > 0 ? `巻き戻しが通算${seeks}回あります。やり直したぶん成績は甘く出ています。` : '',
+    seeks > 0
+      ? `巻き戻しが${selected ? '' : '通算'}${seeks}回あります。やり直したぶん成績は甘く出ています。`
+      : '',
     symbols.length > 1
       ? `${symbols.length}銘柄（${symbols.join('・')}）が混ざっています。損益は合算できますが、MFE/MAEなど「円/株」の数字は値段の水準が違うものを平均しています。`
       : '',
   ].join('');
 
+  const subtitle = selected
+    ? [
+        selected.symbol || '—',
+        selected.dateLabel,
+        selected.fromClock && selected.toClock ? `${selected.fromClock}〜${selected.toClock}` : '',
+        selected.fileName,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : `${list.length}回のチャレンジ · ${a.all.count}取引${symbols.length ? ` · ${symbols.join('・')}` : ''}`;
+
   return (
     <AnalysisView
+      title={selected ? 'チャレンジの分析' : '総合分析'}
       result={a}
-      subtitle={`${list.length}回のチャレンジ · ${a.all.count}取引${symbols.length ? ` · ${symbols.join('・')}` : ''}`}
+      subtitle={subtitle}
       warn={warn}
+      actions={
+        selected ? (
+          <button type="button" className="mini" onClick={() => pick(null)}>
+            すべてに戻す
+          </button>
+        ) : null
+      }
+      bodyRef={bodyRef}
       onClose={onClose}
     >
       <Section title="チャレンジ一覧">
@@ -311,10 +360,7 @@ export function Overall({ onClose }: { onClose: () => void }) {
                   <tr
                     key={c.id}
                     className={picked === c.id ? 'on' : ''}
-                    onClick={() => {
-                      setPicked(picked === c.id ? null : c.id);
-                      setConfirming(false);
-                    }}
+                    onClick={() => pick(picked === c.id ? null : c.id)}
                   >
                     <td>{c.startedAt}</td>
                     <td>{c.symbol || '—'}</td>
@@ -327,7 +373,7 @@ export function Overall({ onClose }: { onClose: () => void }) {
               </tbody>
             </table>
             <div className="an-del">
-              {picked ? (
+              {selected ? (
                 confirming ? (
                   <>
                     <span>このチャレンジの記録をすべて消します。戻せません。</span>
@@ -340,14 +386,17 @@ export function Overall({ onClose }: { onClose: () => void }) {
                   </>
                 ) : (
                   <>
-                    <span>{list.find((c) => c.id === picked)?.startedAt} を選択中</span>
+                    <span>{selected.startedAt} の分析を表示中</span>
+                    <button type="button" className="mini" onClick={() => pick(null)}>
+                      すべてに戻す
+                    </button>
                     <button type="button" className="mini danger" onClick={() => setConfirming(true)}>
                       削除
                     </button>
                   </>
                 )
               ) : (
-                <span>行をクリックすると削除できます</span>
+                <span>行をクリックするとそのチャレンジだけの分析に切り替わります</span>
               )}
             </div>
           </>

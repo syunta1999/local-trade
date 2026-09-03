@@ -10,6 +10,9 @@
   --ok: #06d6a0;
   /* 明暗の「振り切った側」。暗いテーマは白、明るいテーマは黒を入れる */
   --edge: #ffffff;
+  /* チャートの後ろに敷く柄。background の層をそのまま書く（グラデーションや url()）。
+     無地のテーマは none。柄物のテーマだけ lib/themes.ts が上書きする */
+  --bg-art: none;
 
   /* ---- 面（背景に文字色を少しずつ混ぜて階調を作る） ---- */
   --deep: color-mix(in srgb, var(--fg) 2%, var(--bg));
@@ -116,6 +119,25 @@ body {
 .banner,
 .controls {
   flex: 0 0 auto;
+}
+
+/* ---------- retro RPG テーマ ----------
+   ドラクエ風のコマンド窓。角を落として、枠は白い線（--border は lib/themes.ts で白にしてある）。
+   丸い点まで四角になるが、ドット絵らしさとして受け入れる */
+:root[data-theme='retro-rpg'] * {
+  border-radius: 0 !important;
+}
+
+/* チャートを二重線の窓で囲む。リプレイの赤枠と同じ置き方 */
+:root[data-theme='retro-rpg'] .chart-wrap::before {
+  content: '';
+  position: absolute;
+  inset: var(--ind-h) 0 0 0;
+  border: 2px solid var(--fg);
+  outline: 2px solid var(--fg);
+  outline-offset: -6px;
+  pointer-events: none;
+  z-index: 4;
 }
 
 /* ---------- topbar ---------- */
@@ -297,6 +319,8 @@ body {
   min-width: 0;
   min-height: 0;
   position: relative;
+  /* 柄はここに敷く。チャート本体（canvas）は透明にしてあるので、柄がローソクの後ろに透ける */
+  background: var(--bg-art), var(--bg);
 }
 
 .chart {
@@ -2487,7 +2511,7 @@ select {
   }
 }
 
-/* チャレンジ一覧（クリックで選択して削除） */
+/* チャレンジ一覧（クリックでその1回ぶんの分析に切り替え。選んだ行は削除もできる） */
 .an-table.pick tbody tr {
   cursor: pointer;
 }

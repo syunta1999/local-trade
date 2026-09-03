@@ -104,7 +104,8 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
     const chart = createChart(el, {
       autoSize: true,
       layout: {
-        background: { color: C.bg },
+        // 背景は描かない。柄物テーマが .chart-wrap に敷いた柄を透かすため（index.css の --bg-art）
+        background: { color: 'transparent' },
         textColor: C.text,
         fontSize: 11,
         attributionLogo: false,
@@ -177,7 +178,7 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
     if (!chart || !cs || !vs) return;
     refreshPalette();
     chart.applyOptions({
-      layout: { background: { color: C.bg }, textColor: C.text },
+      layout: { background: { color: 'transparent' }, textColor: C.text },
       grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
       rightPriceScale: { borderColor: C.border },
       timeScale: { borderColor: C.border },

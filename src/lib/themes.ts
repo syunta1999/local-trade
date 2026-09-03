@@ -6,6 +6,8 @@
  * 数色だけで済み、1つ足すのも数行で終わる。
  *
  * チャート（lightweight-charts）とSVGも同じ変数を読むので、色の定義はここが唯一の出どころ。
+ *
+ * 柄物のテーマは `--bg-art` にチャートの後ろへ敷く柄も書く（下の「柄」の節）。
  */
 
 export type Theme = {
@@ -29,6 +31,240 @@ const wheel = (h: number) => ((h % 360) + 360) % 360;
 
 const hsl = (h: number, s: number, l: number) =>
   `hsl(${Math.round(wheel(h) * 10) / 10} ${Math.round(s)}% ${Math.round(l)}%)`;
+
+/* ---------- 柄 ----------
+ * 柄物のテーマは `--bg-art` に background の層を並べて書く（先頭がいちばん上）。
+ * index.css が .chart-wrap に `var(--bg-art), var(--bg)` で敷き、チャート本体は透明なので
+ * ローソクの後ろに透ける。板や歩み値は不透明なパネルのままにして、数字の読みやすさは守る。
+ *
+ * 絵は SVG を data URI にして url() で渡す。CSS のグラデーションだけだと
+ * レンガの目地ずらしや星の散らばりが書きにくい。
+ * ローソクを読ませるため、柄は地と近い明るさにとどめ、派手な色は小さな絵に限る。
+ */
+
+/** SVG を CSS の url() に包む。属性の引用符は ' で書く（外側を " で囲むため） */
+const svg = (w: number, h: number, body: string, attrs = '') =>
+  `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'${attrs}>${body}</svg>`,
+  )}")`;
+
+/** background の層を並べる。先頭が手前 */
+const art = (...layers: string[]) => layers.join(', ');
+
+/**
+ * レンガのタイル。1段おきに半個ずらして積む。
+ * faces を順に使うので、色を数個渡すと焼きムラのように見える。
+ * 横2個ぶんで1タイルにすると、ずらした段がタイルの継ぎ目で繋がる。
+ */
+function brickTile(o: {
+  w: number;
+  h: number;
+  rows: number;
+  faces: string[];
+  seam: string;
+  /** レンガの上辺に入れる明るい線。無ければ平らなレンガ */
+  shine?: string;
+}): string {
+  const { w, h, rows, faces, seam, shine } = o;
+  const W = w * 2;
+  const H = h * rows;
+  let body = `<g shape-rendering='crispEdges'><rect width='${W}' height='${H}' fill='${seam}'/>`;
+  let n = 0;
+  for (let r = 0; r < rows; r++) {
+    const off = r % 2 ? w / 2 : 0;
+    for (let c = -1; c < 3; c++) {
+      const x = c * w + off;
+      if (x >= W || x + w <= 0) continue;
+      const face = faces[n++ % faces.length];
+      body += `<rect x='${x + 1}' y='${r * h + 1}' width='${w - 2}' height='${h - 2}' fill='${face}'/>`;
+      if (shine) body += `<rect x='${x + 1}' y='${r * h + 1}' width='${w - 2}' height='2' fill='${shine}'/>`;
+    }
+  }
+  return svg(W, H, body + '</g>');
+}
+
+/**
+ * 星や金粉。点は [x, y, 半径, 不透明度]。
+ * 座標は固定で乱数は使わない。描くたびに柄が変わると気が散る。
+ */
+function dotTile(w: number, h: number, fill: string, pts: [number, number, number, number][]): string {
+  return svg(
+    w,
+    h,
+    pts
+      .map(([x, y, r, a]) => `<circle cx='${x}' cy='${y}' r='${r}' fill='${fill}' fill-opacity='${a}'/>`)
+      .join(''),
+  );
+}
+
+/** チャートの下端はいつも時間軸なので、地面のような絵はこの高さぶん浮かせる */
+const AXIS_H = 26;
+
+/* ---- super mario ---- */
+const MARIO_BRICKS = brickTile({
+  w: 32,
+  h: 16,
+  rows: 4,
+  faces: ['#b8521c', '#ad4b18'],
+  seam: '#1a0a04',
+  shine: '#d9772e',
+});
+const MARIO_STARS = dotTile(160, 120, '#ffffff', [
+  [12, 18, 1.2, 0.9],
+  [58, 7, 0.8, 0.7],
+  [97, 40, 1.4, 0.95],
+  [140, 22, 0.9, 0.6],
+  [30, 78, 1, 0.8],
+  [75, 104, 1.3, 0.85],
+  [118, 86, 0.8, 0.6],
+  [150, 110, 1.1, 0.75],
+  [48, 52, 0.7, 0.5],
+  [128, 60, 1, 0.7],
+]);
+/** 浮いているコイン3枚 */
+const MARIO_COINS = svg(
+  96,
+  28,
+  [14, 48, 82]
+    .map(
+      (cx) =>
+        `<ellipse cx='${cx}' cy='14' rx='9' ry='12' fill='#fbd000'/>` +
+        `<rect x='${cx - 2}' y='7' width='4' height='14' fill='#e08a00'/>`,
+    )
+    .join(''),
+);
+
+/* ---- sunset drive ---- */
+/** 地平線から上の高さ。この下がグリッドの床 */
+const SUNSET_FLOOR = 210;
+/** 縞の入った夕日。下半分の縞はマスクで抜く */
+const SUNSET_SUN = svg(
+  200,
+  200,
+  `<defs>` +
+    `<linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>` +
+    `<stop offset='0' stop-color='#fff06b'/><stop offset='.55' stop-color='#ff7a3c'/><stop offset='1' stop-color='#ff2e88'/>` +
+    `</linearGradient>` +
+    `<mask id='m'><rect width='200' height='200' fill='#fff'/>` +
+    [
+      [108, 4],
+      [122, 5],
+      [138, 7],
+      [157, 9],
+      [180, 11],
+    ]
+      .map(([y, h]) => `<rect y='${y}' width='200' height='${h}' fill='#000'/>`)
+      .join('') +
+    `</mask></defs>` +
+    `<circle cx='100' cy='100' r='94' fill='url(#g)' fill-opacity='.4' mask='url(#m)'/>`,
+);
+/** 消失点へ集まる床のグリッド。横に引き伸ばして使うので線の太さは固定する */
+const SUNSET_GRID = (() => {
+  const stroke = `fill='none' stroke='rgba(255,46,166,.5)' stroke-width='1' vector-effect='non-scaling-stroke'`;
+  const verticals = Array.from({ length: 13 }, (_, i) => i - 6)
+    .map((k) => `<line x1='${500 + k * 24}' y1='0' x2='${500 + k * 150}' y2='${SUNSET_FLOOR}' ${stroke}/>`)
+    .join('');
+  const horizontals = [6, 16, 30, 48, 72, 102, 138, 180]
+    .map((y) => `<line x1='0' y1='${y}' x2='1000' y2='${y}' ${stroke}/>`)
+    .join('');
+  return svg(1000, SUNSET_FLOOR, verticals + horizontals, " preserveAspectRatio='none'");
+})();
+
+/* ---- brick alley ---- */
+const ALLEY_BRICKS = brickTile({
+  w: 60,
+  h: 24,
+  rows: 4,
+  faces: ['#3a1a14', '#3f1d16', '#35170f', '#42221a', '#38180f'],
+  seam: '#1e0d08',
+});
+
+/* ---- to the moon ---- */
+const MOON_STARS_FAR = dotTile(220, 180, '#ffffff', [
+  [14, 22, 0.8, 0.6],
+  [60, 9, 1, 0.8],
+  [105, 48, 0.7, 0.5],
+  [150, 26, 1.3, 0.9],
+  [200, 70, 0.8, 0.55],
+  [30, 110, 1.1, 0.75],
+  [88, 140, 0.9, 0.6],
+  [130, 96, 0.7, 0.45],
+  [176, 150, 1.2, 0.85],
+  [205, 120, 0.8, 0.5],
+  [50, 168, 0.9, 0.65],
+  [112, 12, 0.6, 0.4],
+]);
+const MOON_STARS_NEAR = dotTile(340, 260, '#ffffff', [
+  [40, 60, 1.6, 0.95],
+  [210, 30, 1.4, 0.9],
+  [300, 150, 1.7, 1],
+  [120, 200, 1.5, 0.9],
+  [260, 230, 1.2, 0.8],
+]);
+const MOON_ROCKET = svg(
+  40,
+  64,
+  `<rect x='14' y='14' width='12' height='30' rx='6' fill='#e8ecf5'/>` +
+    `<polygon points='20,2 14,16 26,16' fill='#ff6b00'/>` +
+    `<circle cx='20' cy='26' r='3.5' fill='#4fa8ff'/>` +
+    `<polygon points='14,36 8,48 14,48' fill='#ff6b00'/>` +
+    `<polygon points='26,36 32,48 26,48' fill='#ff6b00'/>` +
+    `<polygon points='16,45 20,62 24,45' fill='#ffd166'/>`,
+);
+
+/* ---- lava ---- */
+/**
+ * ひび割れ。芯の明るい線と、その外側のにじみの2本で光って見せる。
+ * タイルは大きめにして、繰り返しが目に付かないようにする。
+ */
+const LAVA_CRACKS = (() => {
+  const crack = (d: string) =>
+    `<path d='${d}' fill='none' stroke='rgba(255,90,0,.16)' stroke-width='6' stroke-linejoin='round'/>` +
+    `<path d='${d}' fill='none' stroke='rgba(255,150,40,.5)' stroke-width='1.2' stroke-linejoin='round'/>`;
+  // 横に走る線は左右の端で同じ高さにして、タイルの継ぎ目で途切れないようにする
+  return svg(
+    520,
+    360,
+    crack('M0 80 L40 92 L70 74 L110 88 L150 66 L190 84 L230 70 L280 90 L320 78 L360 96 L400 72 L450 86 L490 76 L520 80') +
+      crack('M150 66 L138 30 L150 12') +
+      crack('M400 72 L412 108 L404 130') +
+      crack('M0 240 L36 226 L80 250 L120 232 L170 254 L210 236 L260 258 L300 240 L350 262 L390 244 L440 266 L480 248 L520 240') +
+      crack('M260 258 L276 300 L262 330') +
+      crack('M80 250 L64 290') +
+      crack('M330 150 L360 162 L392 148 L420 170'),
+  );
+})();
+
+/* ---- 億り人 ---- */
+const OKU_DUST = dotTile(200, 200, '#ffd25a', [
+  [20, 30, 1.2, 0.7],
+  [64, 12, 0.8, 0.5],
+  [110, 44, 1.6, 0.85],
+  [160, 20, 1, 0.6],
+  [184, 76, 0.9, 0.5],
+  [36, 96, 1.4, 0.8],
+  [92, 120, 0.8, 0.45],
+  [140, 104, 1.1, 0.65],
+  [178, 150, 1.5, 0.9],
+  [60, 160, 1, 0.6],
+  [118, 186, 0.9, 0.5],
+  [16, 140, 0.7, 0.4],
+  [150, 60, 0.7, 0.45],
+  [86, 70, 0.9, 0.55],
+]);
+const OKU_DUST_BIG = dotTile(320, 280, '#fff1b0', [
+  [50, 40, 2, 0.55],
+  [240, 90, 1.8, 0.5],
+  [130, 200, 2.2, 0.6],
+  [290, 230, 1.6, 0.45],
+  [180, 140, 1.4, 0.4],
+]);
+/** 透かしの「億」 */
+const OKU_MARK = svg(
+  200,
+  200,
+  `<text x='100' y='150' text-anchor='middle' font-family='serif' font-weight='700' font-size='150' fill='#ffc300' fill-opacity='.07'>億</text>`,
+);
 
 /** hsl を sRGB の相対輝度に直す（WCAGと同じ式） */
 function luminance(h: number, s: number, l: number): number {
@@ -666,6 +902,338 @@ export const THEMES: Theme[] = [
       '--bot-fade': '#00e5d4',
       '--bot-break': '#ffd98a',
       '--bot-scalp': '#9d8cff',
+    },
+  },
+  {
+    id: 'super-mario',
+    label: 'super mario',
+    note: '夜のステージ。星空にレンガの地面、コインの金',
+    vars: {
+      '--bg': '#050818',
+      '--fg': '#f4f4ff',
+      '--edge': '#ffffff',
+      // 上げはマリオの赤、下げはルイージの緑
+      '--up': '#ff3a2f',
+      '--down': '#4dcf52',
+      '--accent': '#fbd000',
+      '--sel': '#2a5bd7',
+      '--ok': '#5ee35e',
+      '--ma-5': '#fbd000',
+      '--ma-10': '#ff8c00',
+      '--ma-25': '#7fd8ff',
+      '--ma-50': '#ff9ad5',
+      '--ma-75': '#b388ff',
+      '--ma-100': '#e0b070',
+      '--ma-200': '#a0a0b0',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#3d4a8a',
+      '--rsi-line': '#fbd000',
+      '--rsi-guide': '#1c2455',
+      '--vwap': '#ff5fe0',
+      // ゴーストはテレサ
+      '--ghost': '#e6e0ff',
+      '--bot-fade': '#7fd8ff',
+      '--bot-break': '#fbd000',
+      '--bot-scalp': '#b388ff',
+      '--bg-art': art(
+        `${MARIO_COINS} 120px 64px no-repeat`,
+        `${MARIO_BRICKS} left 0 bottom ${AXIS_H}px / 64px 64px repeat-x`,
+        // 丘。下半分はレンガの後ろに隠れる
+        `radial-gradient(ellipse 170px 100px at 22% calc(100% - ${AXIS_H + 64}px), rgba(72,190,84,.28) 0 99%, transparent 100%)`,
+        `radial-gradient(ellipse 110px 64px at 66% calc(100% - ${AXIS_H + 64}px), rgba(72,190,84,.22) 0 99%, transparent 100%)`,
+        // 雲
+        `radial-gradient(ellipse 64px 22px at 16% 18%, rgba(255,255,255,.16) 0 99%, transparent 100%)`,
+        `radial-gradient(ellipse 84px 26px at 72% 30%, rgba(255,255,255,.13) 0 99%, transparent 100%)`,
+        `${MARIO_STARS} repeat`,
+      ),
+    },
+  },
+  {
+    id: 'doraemon',
+    label: 'doraemon',
+    note: '青い体に白いおなか、赤い首輪と鈴',
+    vars: {
+      '--bg': '#0b3f86',
+      '--fg': '#ffffff',
+      '--edge': '#ffffff',
+      '--up': '#ff5147',
+      '--down': '#5cc8ff',
+      '--accent': '#ffd400',
+      // 選択はどこでもドアのピンク
+      '--sel': '#e8508f',
+      '--ok': '#43d47a',
+      '--ma-5': '#ffd400',
+      '--ma-10': '#ffa040',
+      '--ma-25': '#5ff0c0',
+      '--ma-50': '#a8e4ff',
+      '--ma-75': '#c9b3ff',
+      '--ma-100': '#ff8fd0',
+      '--ma-200': '#9fb6d6',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#3f76c0',
+      '--rsi-line': '#ffd400',
+      '--rsi-guide': '#1c5aa8',
+      '--vwap': '#ff69b4',
+      '--ghost': '#d9c8ff',
+      '--bot-fade': '#5cc8ff',
+      '--bot-break': '#ffd400',
+      '--bot-scalp': '#c9b3ff',
+      '--bg-art': art(
+        // 鈴
+        `radial-gradient(circle at 50% calc(100% - ${AXIS_H + 7}px), #ffd400 0 11px, #8a6d00 11px 13px, transparent 14px)`,
+        // 首輪
+        `linear-gradient(#e60012, #e60012) left 0 bottom ${AXIS_H}px / 100% 14px no-repeat`,
+        // 四次元ポケットの縁
+        `radial-gradient(ellipse 16% 24% at 50% calc(100% - ${AXIS_H + 14}px), transparent 0 93%, rgba(255,255,255,.5) 94% 100%, transparent 100%)`,
+        // おなか
+        `radial-gradient(ellipse 44% 60% at 50% calc(100% - ${AXIS_H + 14}px), rgba(255,255,255,.1) 0 99%, transparent 100%)`,
+        // 上へいくほど明るい青
+        `linear-gradient(180deg, rgba(58,168,245,.4), transparent 38%)`,
+      ),
+    },
+  },
+  {
+    id: 'sunset-drive',
+    label: 'sunset drive',
+    note: '夕日と地平線のグリッド。ネオンのピンクとシアン',
+    vars: {
+      '--bg': '#12052e',
+      '--fg': '#fff0f8',
+      '--edge': '#ffffff',
+      '--up': '#ff2ea6',
+      '--down': '#00e5ff',
+      '--accent': '#ffb020',
+      '--sel': '#7a2bd6',
+      '--ok': '#39ffb0',
+      '--ma-5': '#ffb020',
+      '--ma-10': '#ff6a2a',
+      '--ma-25': '#39ffb0',
+      '--ma-50': '#7fb8ff',
+      '--ma-75': '#b98cff',
+      '--ma-100': '#ff8fd0',
+      '--ma-200': '#a08cc0',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#6a3a9a',
+      '--rsi-line': '#ffb020',
+      '--rsi-guide': '#3a1a66',
+      '--vwap': '#ffee55',
+      '--ghost': '#c4a5ff',
+      '--bot-fade': '#00e5ff',
+      '--bot-break': '#ffb020',
+      '--bot-scalp': '#b98cff',
+      // 地平線は下から SUNSET_FLOOR + 時間軸の高さ。夕日はその上に乗せる
+      '--bg-art': art(
+        `${SUNSET_GRID} left 0 bottom ${AXIS_H}px / 100% ${SUNSET_FLOOR}px no-repeat`,
+        `${SUNSET_SUN} center bottom ${AXIS_H + SUNSET_FLOOR - 6}px / 200px 200px no-repeat`,
+        `linear-gradient(180deg, #0a0220 0%, #2a0a52 calc(100% - ${AXIS_H + SUNSET_FLOOR + 190}px), #7a1660 calc(100% - ${AXIS_H + SUNSET_FLOOR + 26}px), #ff6a2a calc(100% - ${AXIS_H + SUNSET_FLOOR + 2}px), #ffb347 calc(100% - ${AXIS_H + SUNSET_FLOOR}px), #2a0838 calc(100% - ${AXIS_H + SUNSET_FLOOR - 2}px), #12052e 100%)`,
+      ),
+    },
+  },
+  {
+    id: 'brick-alley',
+    label: 'brick alley',
+    note: '裏路地のレンガ壁にスプレーの蛍光色',
+    vars: {
+      '--bg': '#24100a',
+      '--fg': '#f5efe8',
+      '--edge': '#ffffff',
+      '--up': '#ff3fa4',
+      '--down': '#29e0ff',
+      '--accent': '#ffe600',
+      '--sel': '#8b3fd9',
+      '--ok': '#8fff29',
+      '--ma-5': '#ffe600',
+      '--ma-10': '#ff7a1a',
+      '--ma-25': '#8fff29',
+      '--ma-50': '#7fb0ff',
+      '--ma-75': '#b46bff',
+      '--ma-100': '#ff7ad9',
+      '--ma-200': '#b8a59a',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#6b4a3e',
+      '--rsi-line': '#ffe600',
+      '--rsi-guide': '#4a2418',
+      '--vwap': '#ff9a1a',
+      '--ghost': '#c8a5ff',
+      '--bot-fade': '#29e0ff',
+      '--bot-break': '#ffe600',
+      '--bot-scalp': '#b46bff',
+      '--bg-art': art(
+        // スプレーの吹きだまり
+        `radial-gradient(circle at 18% 28%, rgba(255,63,164,.22), transparent 140px)`,
+        `radial-gradient(circle at 74% 56%, rgba(41,224,255,.16), transparent 160px)`,
+        `radial-gradient(circle at 50% 84%, rgba(255,230,0,.14), transparent 120px)`,
+        `radial-gradient(circle at 90% 12%, rgba(143,255,41,.12), transparent 110px)`,
+        // 上から差す街灯
+        `linear-gradient(180deg, rgba(255,255,255,.05), transparent 30%)`,
+        `${ALLEY_BRICKS} 0 0 / 120px 96px repeat`,
+      ),
+    },
+  },
+  {
+    id: 'to-the-moon',
+    label: 'to the moon',
+    note: '星空と月、ロケット',
+    vars: {
+      '--bg': '#03040f',
+      '--fg': '#eef1ff',
+      '--edge': '#ffffff',
+      '--up': '#ff6b00',
+      '--down': '#4fa8ff',
+      '--accent': '#fff3b0',
+      '--sel': '#6a3df5',
+      '--ok': '#39ff9c',
+      '--ma-5': '#fff3b0',
+      '--ma-10': '#ffa640',
+      '--ma-25': '#39ff9c',
+      '--ma-50': '#7fe0ff',
+      '--ma-75': '#b58cff',
+      '--ma-100': '#ff8fd0',
+      '--ma-200': '#8a93b8',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#3a4a8a',
+      '--rsi-line': '#fff3b0',
+      '--rsi-guide': '#1a2350',
+      '--vwap': '#ff3ea5',
+      '--ghost': '#c4b5fd',
+      '--bot-fade': '#7fe0ff',
+      '--bot-break': '#ffa640',
+      '--bot-scalp': '#b58cff',
+      '--bg-art': art(
+        `${MOON_ROCKET} left 28px bottom ${AXIS_H + 20}px / 40px 64px no-repeat`,
+        // 月。値段軸に被らないよう右端から少し離す
+        `radial-gradient(circle at calc(100% - 120px) 78px, #fff8d6 0 30px, rgba(255,248,214,.25) 31px 40px, transparent 62px)`,
+        // 地球の照り返し
+        `radial-gradient(ellipse 70% 32% at 12% 104%, rgba(64,150,255,.35), transparent 70%)`,
+        // 星雲
+        `radial-gradient(ellipse 50% 40% at 32% 42%, rgba(130,70,220,.18), transparent 70%)`,
+        `${MOON_STARS_NEAR} repeat`,
+        `${MOON_STARS_FAR} repeat`,
+      ),
+    },
+  },
+  {
+    id: 'lava',
+    label: 'lava',
+    note: '黒曜石のひび割れから溶岩が光る',
+    vars: {
+      '--bg': '#0b0604',
+      '--fg': '#ffe8d6',
+      '--edge': '#ffffff',
+      '--up': '#ff4500',
+      '--down': '#7fa6c9',
+      '--accent': '#ffd54a',
+      '--sel': '#8a2a0a',
+      '--ok': '#9dff3d',
+      '--ma-5': '#ffd54a',
+      '--ma-10': '#ff8c1a',
+      '--ma-25': '#9dff3d',
+      '--ma-50': '#5fd6d0',
+      '--ma-75': '#c48cff',
+      '--ma-100': '#ff8fb0',
+      '--ma-200': '#8a7a70',
+      '--ma-x': '#ffe8d6',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#5a3a30',
+      '--rsi-line': '#ffd54a',
+      '--rsi-guide': '#3a1a10',
+      '--vwap': '#ff2ea6',
+      '--ghost': '#c4a5ff',
+      '--bot-fade': '#7fa6c9',
+      '--bot-break': '#ffd54a',
+      '--bot-scalp': '#c48cff',
+      '--bg-art': art(
+        `${LAVA_CRACKS} repeat`,
+        // 下からの熱
+        `linear-gradient(0deg, rgba(255,69,0,.32), rgba(150,25,0,.14) 30%, transparent 62%)`,
+        // 溶岩だまりの照り
+        `radial-gradient(ellipse 45% 30% at 78% 100%, rgba(255,120,0,.28), transparent 70%)`,
+      ),
+    },
+  },
+  {
+    id: 'retro-rpg',
+    label: 'retro RPG',
+    note: '黒地に白い枠のコマンド窓。角は四角',
+    vars: {
+      '--bg': '#000000',
+      '--fg': '#ffffff',
+      '--edge': '#ffffff',
+      '--up': '#ff3c3c',
+      '--down': '#4f8cff',
+      '--accent': '#ffd700',
+      '--sel': '#3355cc',
+      '--ok': '#4cd964',
+      // 窓の枠は白い線。角を落とす CSS は index.css の [data-theme='retro-rpg']
+      '--border': '#ffffff',
+      '--border-2': '#ffffff',
+      '--ma-5': '#ffd700',
+      '--ma-10': '#ff9b3c',
+      '--ma-25': '#4cd964',
+      '--ma-50': '#4fdfff',
+      '--ma-75': '#b48cff',
+      '--ma-100': '#ff8ad8',
+      '--ma-200': '#8c8c8c',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#555555',
+      '--rsi-line': '#ffd700',
+      '--rsi-guide': '#333333',
+      '--vwap': '#d066ff',
+      '--ghost': '#c8c8ff',
+      '--bot-fade': '#4fdfff',
+      '--bot-break': '#ffd700',
+      '--bot-scalp': '#b48cff',
+      // ブラウン管の走査線
+      '--bg-art': art(
+        `repeating-linear-gradient(180deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)`,
+      ),
+    },
+  },
+  {
+    id: 'okuribito',
+    label: '億り人',
+    note: '黒地に金粉。上げは金、下げは銀',
+    vars: {
+      '--bg': '#0a0800',
+      '--fg': '#fff3d0',
+      '--edge': '#ffffff',
+      '--up': '#ffc300',
+      '--down': '#c0c8d0',
+      '--accent': '#ffe9a0',
+      '--sel': '#6b4a00',
+      '--ok': '#7ddc6b',
+      '--ma-5': '#ffe9a0',
+      '--ma-10': '#ff9f1c',
+      '--ma-25': '#7ddc6b',
+      '--ma-50': '#5fd0e0',
+      '--ma-75': '#c9a3ff',
+      '--ma-100': '#ff9ac8',
+      '--ma-200': '#8a8270',
+      '--ma-x': '#fff3d0',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#5a4a20',
+      '--rsi-line': '#ffc300',
+      '--rsi-guide': '#2e2408',
+      '--vwap': '#ff3ea5',
+      '--ghost': '#c9a3ff',
+      '--bot-fade': '#5fd0e0',
+      '--bot-break': '#ffc300',
+      '--bot-scalp': '#c9a3ff',
+      '--bg-art': art(
+        `${OKU_DUST_BIG} repeat`,
+        `${OKU_DUST} repeat`,
+        `${OKU_MARK} center 55% / auto 56% no-repeat`,
+        // 上から差す金の光
+        `linear-gradient(180deg, rgba(255,195,0,.24), rgba(255,195,0,.06) 32%, transparent 60%)`,
+        // 光の筋
+        `repeating-linear-gradient(112deg, transparent 0 70px, rgba(255,215,0,.045) 70px 100px)`,
+      ),
     },
   },
   {
