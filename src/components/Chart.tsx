@@ -23,8 +23,12 @@ import {
   rsiSeries,
   smaAt,
   smaSeries,
+  vwapAdvance,
+  vwapPeek,
+  vwapSeries,
   type LinePoint,
   type RsiState,
+  type VwapState,
 } from '../lib/indicators';
 import type { GhostTrade } from '../lib/csvfile';
 import type { Candle, IndicatorConfig } from '../lib/types';
@@ -67,12 +71,16 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
   const barCountRef = useRef(0);
   const lastBarTimeRef = useRef<number | null>(null);
 
-  /** 指標計算の元データ。終値だけあれば足りる */
-  const barsRef = useRef<{ times: number[]; closes: number[] }>({ times: [], closes: [] });
+  /** 指標計算の元データ。typical は VWAP 用の代表値 (高値+安値+終値)/3 */
+  const barsRef = useRef<{ times: number[]; closes: number[]; typical: number[]; volumes: number[] }>(
+    { times: [], closes: [], typical: [], volumes: [] },
+  );
   const maRef = useRef(new Map<number, Line>());
   const bbRef = useRef<{ mid: Line; upper: Line; lower: Line } | null>(null);
   const rsiRef = useRef<Line | null>(null);
   const rsiStateRef = useRef<RsiState | null>(null);
+  const vwapRef = useRef<Line | null>(null);
+  const vwapStateRef = useRef<VwapState | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const ghostRef = useRef<GhostTrade[]>(ghost);
   const replayRef = useRef<GhostTrade[]>(replayTrades);
@@ -156,6 +164,8 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
       bbRef.current = null;
       rsiRef.current = null;
       rsiStateRef.current = null;
+      vwapRef.current = null;
+      vwapStateRef.current = null;
     };
   }, []);
 
@@ -365,11 +375,18 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
       rsi.setData(toLine(r.points));
       rsiStateRef.current = r.state;
     }
+
+    const vwap = vwapRef.current;
+    if (vwap) {
+      const v = vwapSeries(times, barsRef.current.typical, barsRef.current.volumes);
+      vwap.setData(toLine(v.points));
+      vwapStateRef.current = v.state;
+    }
   }, []);
 
   /** 進行中の足の分だけ引き直す。ティック毎に呼ばれるので定数時間で済ませる */
   const updateIndicatorsLast = useCallback(() => {
-    const { times, closes } = barsRef.current;
+    const { times, closes, typical, volumes } = barsRef.current;
     const n = closes.length;
     if (n === 0) return;
     const i = n - 1;
@@ -406,6 +423,21 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
         if (v !== undefined) rsi.update({ time, value: v });
       }
     }
+
+    const vwap = vwapRef.current;
+    if (vwap) {
+      const st = vwapStateRef.current;
+      if (!st) {
+        const v = vwapSeries(times, typical, volumes);
+        vwap.setData(toLine(v.points));
+        vwapStateRef.current = v.state;
+      } else {
+        // 閉じた足を累計に入れる。追いついていれば何もしない
+        vwapAdvance(st, times, typical, volumes, n - 2);
+        const v = vwapPeek(st, times, typical, volumes, i);
+        if (v !== undefined) vwap.update({ time, value: v });
+      }
+    }
   }, []);
 
   // ---- 指標シリーズの生成 / 破棄 ---------------------------------------
@@ -431,6 +463,11 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
         rsiRef.current = null;
         rsiStateRef.current = null;
         if (panes.length > 1) chart.removePane(1);
+      }
+      if (vwapRef.current) {
+        chart.removeSeries(vwapRef.current);
+        vwapRef.current = null;
+        vwapStateRef.current = null;
       }
     }
 
@@ -481,6 +518,22 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
       chart.removeSeries(bbRef.current.lower);
       chart.removeSeries(bbRef.current.mid);
       bbRef.current = null;
+    }
+
+    // VWAP は値段と同じスケールなので、ローソクと同じペインに重ねる。
+    // その日の基準値として見るものなので、移動平均より太く引く
+    if (indicators.vwap && !vwapRef.current) {
+      vwapRef.current = chart.addSeries(LineSeries, {
+        color: C.vwap,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+    } else if (!indicators.vwap && vwapRef.current) {
+      chart.removeSeries(vwapRef.current);
+      vwapRef.current = null;
+      vwapStateRef.current = null;
     }
 
     // RSI は 0〜100 の別スケールなので専用ペインに置く
@@ -554,8 +607,11 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
         barsRef.current = {
           times: candles.map((c) => c.time),
           closes: candles.map((c) => c.close),
+          typical: candles.map((c) => (c.high + c.low + c.close) / 3),
+          volumes: candles.map((c) => c.volume),
         };
         rsiStateRef.current = null;
+        vwapStateRef.current = null;
         redrawIndicators();
 
         barCountRef.current = candles.length;
@@ -572,12 +628,17 @@ export function Chart({ ref, indicators, ghost, replayTrades, interval, theme }:
           barCountRef.current += 1;
           bars.times.push(c.time);
           bars.closes.push(c.close);
+          bars.typical.push((c.high + c.low + c.close) / 3);
+          bars.volumes.push(c.volume);
           // 満杯になるまでは左詰め。以降は lightweight-charts の自動スクロールに任せる。
           if (barCountRef.current <= VISIBLE_BARS) applyRange();
           applyMarks();
           applyTradeLines();
         } else if (bars.closes.length > 0) {
-          bars.closes[bars.closes.length - 1] = c.close;
+          const last = bars.closes.length - 1;
+          bars.closes[last] = c.close;
+          bars.typical[last] = (c.high + c.low + c.close) / 3;
+          bars.volumes[last] = c.volume;
         }
 
         candleRef.current?.update({

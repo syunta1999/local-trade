@@ -1,10 +1,10 @@
 import type { Analysis, ChallengeLog, Excursion } from './analysis';
 import { formatClock } from './csv';
-import type { PositionSide, Trade } from './trading';
+import type { ExitBy, PositionSide, Trade } from './trading';
 
 /** 取引履歴をCSV文字列にする。Excelで開けるよう UTF-8 BOM を付ける */
 export function tradesToCsv(trades: Trade[], symbol: string | null, dateLabel: string): string {
-  const head = '銘柄,日付,番号,方向,数量,建玉時刻,建値,返済時刻,返済値,損益,累計損益';
+  const head = '銘柄,日付,番号,方向,数量,建玉時刻,建値,返済時刻,返済値,損益,累計損益,返済種別';
   let acc = 0;
   const rows = trades.map((t) => {
     acc += t.pnl;
@@ -20,6 +20,7 @@ export function tradesToCsv(trades: Trade[], symbol: string | null, dateLabel: s
       round2(t.exit),
       round2(t.pnl),
       round2(acc),
+      exitLabel(t),
     ].join(',');
   });
   return `﻿${[head, ...rows].join('\r\n')}\r\n`;
@@ -28,6 +29,14 @@ export function tradesToCsv(trades: Trade[], symbol: string | null, dateLabel: s
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/** 返済の手段。CSVには日本語で書く */
+const exitLabel = (t: Trade) =>
+  t.exitBy === 'stop' ? '逆指値' : t.exitBy === 'profit' ? '利確' : '指値';
+
+/** CSVの返済種別を戻す。列が無い古い行は指値として扱う */
+const exitFrom = (v: string | undefined): ExitBy =>
+  v === '逆指値' ? 'stop' : v === '利確' ? 'profit' : 'limit';
 
 /** 文字列をCSVファイルとしてダウンロードさせる */
 export function downloadCsv(text: string, fileName: string): void {
@@ -51,7 +60,7 @@ const CHALLENGE_HEAD =
   'ID,開始日時,終了日時,銘柄,日付,ファイル,開始時刻,終了時刻,取引数,勝ち,負け,勝率,総損益,PF,RR,期待値,損益分岐勝率,優位性,最大DD,最大連勝,最大連敗,平均保有秒,勝ち保有秒,負け保有秒,平均MFE,平均MAE,負け逆行,負け損切,勝ち逆行,収穫率,取消数,シーク数';
 
 const CHALLENGE_TRADES_HEAD =
-  'チャレンジID,銘柄,日付,番号,方向,数量,建玉時刻,建値,返済時刻,返済値,損益,保有秒,MFE,MAE,建玉待ち秒,返済待ち秒';
+  'チャレンジID,銘柄,日付,番号,方向,数量,建玉時刻,建値,返済時刻,返済値,損益,保有秒,MFE,MAE,建玉待ち秒,返済待ち秒,返済種別';
 
 const stamp = (ms: number) => {
   const d = new Date(ms);
@@ -121,6 +130,7 @@ export function challengeTradeRows(log: ChallengeLog, a: Analysis): string[] {
       round2(e?.mae ?? 0),
       Math.round(t.entryWait),
       Math.round(t.exitWait),
+      exitLabel(t),
     ].join(',');
   });
 }
@@ -256,6 +266,7 @@ export async function loadChallenges(): Promise<StoredChallenges | null> {
       entryWait: toNum(r['建玉待ち秒']),
       exitWait: toNum(r['返済待ち秒']),
       pnl: toNum(r['損益']),
+      exitBy: exitFrom(r['返済種別']),
     };
     const mfe = toNum(r['MFE']);
     const mae = toNum(r['MAE']);

@@ -174,3 +174,97 @@ export function rsiPeek(state: RsiState, closes: number[], index: number): numbe
   }
   return rsiFrom(g, l);
 }
+
+// ---- VWAP --------------------------------------------------------------
+
+/**
+ * 出来高加重平均価格（その日に売買が成立した値段の平均）。
+ *
+ * 移動平均と違って「直近◯本」ではなく、その日の寄り付きからの累計で引く。
+ * 日付が変わったら累計を切り直す（前日の売買は今日の基準値にならない）。
+ *
+ * RSIと同じく、進行中の足を織り込まない確定状態を持ち回る。
+ * confirmed = この足まで累計に入れ終わった、という意味。
+ */
+export type VwapState = {
+  confirmed: number;
+  /** 累計の 値段×出来高 */
+  pv: number;
+  /** 累計の出来高 */
+  vol: number;
+  /** 累計を始めた日（epoch日）。またいだら切り直す */
+  day: number;
+};
+
+/** 時刻がどの日に属するか。時刻はJSTの壁時計をUTC秒にしてあるので、そのまま割ればJSTの日付になる */
+const dayOf = (time: number) => Math.floor(time / 86400);
+
+const emptyVwap = (): VwapState => ({ confirmed: -1, pv: 0, vol: 0, day: Number.NaN });
+
+/** state を index の足まで確定させる（足が閉じたときに呼ぶ） */
+export function vwapAdvance(
+  state: VwapState,
+  times: number[],
+  typical: number[],
+  volumes: number[],
+  index: number,
+): void {
+  for (let i = state.confirmed + 1; i <= index; i++) {
+    const d = dayOf(times[i]);
+    if (d !== state.day) {
+      state.day = d;
+      state.pv = 0;
+      state.vol = 0;
+    }
+    state.pv += typical[i] * volumes[i];
+    state.vol += volumes[i];
+    state.confirmed = i;
+  }
+}
+
+/** 確定状態を壊さずに index の暫定VWAPを覗く（進行中の足用） */
+export function vwapPeek(
+  state: VwapState,
+  times: number[],
+  typical: number[],
+  volumes: number[],
+  index: number,
+): number | undefined {
+  if (index <= state.confirmed) return undefined;
+  let { pv, vol, day } = state;
+  for (let i = state.confirmed + 1; i <= index; i++) {
+    const d = dayOf(times[i]);
+    if (d !== day) {
+      day = d;
+      pv = 0;
+      vol = 0;
+    }
+    pv += typical[i] * volumes[i];
+    vol += volumes[i];
+  }
+  // 出来高ゼロの足しか無い間は平均が出せない
+  return vol > 0 ? pv / vol : undefined;
+}
+
+/**
+ * 全期間のVWAPと、最終足の1本手前まで確定させた状態を返す。
+ * 最終足は進行中なので確定させない。
+ */
+export function vwapSeries(
+  times: number[],
+  typical: number[],
+  volumes: number[],
+): { points: LinePoint[]; state: VwapState } {
+  const n = times.length;
+  const points: LinePoint[] = [];
+  const state = emptyVwap();
+  for (let i = 0; i < n - 1; i++) {
+    vwapAdvance(state, times, typical, volumes, i);
+    if (state.vol > 0) points.push({ time: times[i], value: state.pv / state.vol });
+  }
+  if (n > 0) {
+    const v = vwapPeek(state, times, typical, volumes, n - 1);
+    if (v !== undefined) points.push({ time: times[n - 1], value: v });
+  }
+  return { points, state };
+}

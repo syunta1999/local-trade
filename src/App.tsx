@@ -5,7 +5,9 @@ import { IndicatorBar } from './components/IndicatorBar';
 import { Analysis, Overall } from './components/Analysis';
 import { DailyCard } from './components/DailyCard';
 import { Help } from './components/Help';
+import { LimitOrder } from './components/LimitOrder';
 import { MatchCard, MatchResult } from './components/Match';
+import { StopSetting } from './components/StopSetting';
 import { RulePanel } from './components/RulePanel';
 import { Tape } from './components/Tape';
 import { TradePanel } from './components/TradePanel';
@@ -73,6 +75,16 @@ async function fetchCsv(name: string): Promise<ArrayBuffer> {
 }
 const LARGE_SIZES = [1000, 3000, 5000, 10000];
 const EMPTY_GHOST: GhostTrade[] = [];
+
+/** 板と歩み値のおよその幅。小窓の初期位置は、これらに被らないチャートの右寄りに置く */
+const RIGHT_PANES = 540;
+/** 指値注文の窓の初期位置。チャートの右上 */
+const placeLimit = (w: number) => ({ x: Math.max(16, window.innerWidth - w - RIGHT_PANES), y: 96 });
+/** 逆指値の窓の初期位置。指値注文の窓の下 */
+const placeStop = (w: number, h: number) => ({
+  x: Math.max(16, window.innerWidth - w - RIGHT_PANES),
+  y: Math.max(96, window.innerHeight - h - 110),
+});
 
 const nf = new Intl.NumberFormat('ja-JP');
 
@@ -153,7 +165,14 @@ export default function App() {
   const [showOverall, setShowOverall] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   // どれも既定は非表示。必要になったらボタンで出す
-  const [views, setViews] = useState({ rules: false, ghost: false, daily: false, match: false });
+  const [views, setViews] = useState({
+    rules: false,
+    ghost: false,
+    daily: false,
+    match: false,
+    limit: false,
+    stop: false,
+  });
   const [level, setLevel] = useState<Level>(DEFAULT_SETTINGS.level);
   const [roundSec, setRoundSec] = useState(DEFAULT_SETTINGS.roundSec);
   const [matchBox, setMatchBox] = useState<Box>(DEFAULT_SETTINGS.matchBox);
@@ -161,6 +180,11 @@ export default function App() {
   const [botBox, setBotBox] = useState<Box>(DEFAULT_SETTINGS.botBox);
   const [botOpen, setBotOpen] = useState(DEFAULT_SETTINGS.botOpen);
   const [botFold, setBotFold] = useState(DEFAULT_SETTINGS.botFold);
+  /** 指値注文・逆指値の小窓の位置と畳み */
+  const [limitBox, setLimitBox] = useState<Box>(DEFAULT_SETTINGS.limitBox);
+  const [limitFold, setLimitFold] = useState(DEFAULT_SETTINGS.limitFold);
+  const [stopBox, setStopBox] = useState<Box>(DEFAULT_SETTINGS.stopBox);
+  const [stopFold, setStopFold] = useState(DEFAULT_SETTINGS.stopFold);
   /** ヘッダーとフッターは畳める。畳んだぶんチャートが広がる */
   const [chrome, setChrome] = useState({
     header: DEFAULT_SETTINGS.header,
@@ -300,6 +324,7 @@ export default function App() {
   const { loaded: saved, save: saveSettings } = useSettings();
   const applied = useRef(false);
   const { setSpeed, setSkipGaps } = replay;
+  const { stopCfg, setStopCfg } = trading;
 
   // 保存してあった設定を一度だけ当てる
   useEffect(() => {
@@ -316,13 +341,23 @@ export default function App() {
     setBotBox(saved.botBox);
     setBotOpen(saved.botOpen);
     setBotFold(saved.botFold);
+    setLimitBox(saved.limitBox);
+    setLimitFold(saved.limitFold);
+    setStopBox(saved.stopBox);
+    setStopFold(saved.stopFold);
+    setStopCfg({
+      on: saved.stopOn,
+      width: saved.stopWidth,
+      profitOn: saved.profitOn,
+      profitWidth: saved.profitWidth,
+    });
     setChrome({ header: saved.header, footer: saved.footer });
     setTheme(saved.theme);
     setSpeed(saved.speed);
     setSkipGaps(saved.skipGaps);
     for (const k of ['bgm', 'tape', 'fill'] as const) setSoundChannel(k, saved.sound[k]);
     setSound(soundPrefs());
-  }, [saved, setSpeed, setSkipGaps]);
+  }, [saved, setSpeed, setSkipGaps, setStopCfg]);
 
   // 変わったら書き戻す。読み込みが済むまでは何もしない
   const { speed, skipGaps } = replay;
@@ -346,6 +381,14 @@ export default function App() {
       header: chrome.header,
       footer: chrome.footer,
       theme,
+      stopOn: stopCfg.on,
+      stopWidth: stopCfg.width,
+      profitOn: stopCfg.profitOn,
+      profitWidth: stopCfg.profitWidth,
+      limitBox,
+      limitFold,
+      stopBox,
+      stopFold,
     });
   }, [
     saveSettings,
@@ -365,6 +408,11 @@ export default function App() {
     botFold,
     chrome,
     theme,
+    stopCfg,
+    limitBox,
+    limitFold,
+    stopBox,
+    stopFold,
   ]);
 
   /**
@@ -443,6 +491,7 @@ export default function App() {
       maPeriods: ind.maOn ? ind.maPeriods : [],
       bb: { on: ind.bbOn, period: ind.bbPeriod, sigma: ind.bbSigma },
       rsi: { on: ind.rsiOn, period: ind.rsiPeriod },
+      vwap: ind.vwapOn,
     }),
     [ind],
   );
@@ -742,6 +791,8 @@ export default function App() {
           onToggleView={(k) => {
             // 畳んだまま閉じていても、出し直したら中身が見えるようにする
             if (k === 'match') setMatchFold(false);
+            if (k === 'limit') setLimitFold(false);
+            if (k === 'stop') setStopFold(false);
             setViews((v) => ({ ...v, [k]: !v[k] }));
           }}
           ghostCount={ghost.length}
@@ -875,6 +926,36 @@ export default function App() {
 
       {matchResult && (
         <MatchResult rows={matchResult.rows} last={matchResult.last} onClose={clearResult} />
+      )}
+
+      {views.limit && (
+        <LimitOrder
+          trading={trading}
+          last={stats.last}
+          tickSize={tickSize}
+          clock={replay.clock}
+          disabled={disabled}
+          box={limitBox}
+          onBox={setLimitBox}
+          collapsed={limitFold}
+          onCollapse={setLimitFold}
+          onClose={() => setViews((v) => ({ ...v, limit: false }))}
+          place={placeLimit}
+        />
+      )}
+
+      {views.stop && (
+        <StopSetting
+          trading={trading}
+          last={stats.last}
+          tickSize={tickSize}
+          box={stopBox}
+          onBox={setStopBox}
+          collapsed={stopFold}
+          onCollapse={setStopFold}
+          onClose={() => setViews((v) => ({ ...v, stop: false }))}
+          place={placeStop}
+        />
       )}
 
       {views.rules && (

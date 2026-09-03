@@ -41,6 +41,7 @@ export type Palette = {
   bbMid: string;
   rsiLine: string;
   rsiGuide: string;
+  vwap: string;
   ghost: string;
   ghostWin: string;
   ghostLose: string;
@@ -68,6 +69,7 @@ export const C: Palette = {
   bbMid: '#6f7a8a',
   rsiLine: '#ffb74d',
   rsiGuide: '#4a5361',
+  vwap: '#ff5ec8',
   ghost: '#8b7fd4',
   ghostWin: 'rgba(239, 83, 80, 0.75)',
   ghostLose: 'rgba(66, 165, 245, 0.75)',
@@ -110,6 +112,7 @@ function palette(): Palette {
     bbMid: v('--bb-mid', '#6f7a8a'),
     rsiLine: v('--rsi-line', '#ffb74d'),
     rsiGuide: v('--rsi-guide', '#4a5361'),
+    vwap: v('--vwap', '#ff5ec8'),
     ghost: v('--ghost', '#8b7fd4'),
     ghostWin: fade(up, 0.75),
     ghostLose: fade(down, 0.75),

@@ -104,6 +104,18 @@ export function IndicatorBar({ value, onChange, interval, disabled }: Props) {
         </div>
       </div>
 
+      <div className={`ind-group${value.vwapOn ? ' on' : ''}`}>
+        <button
+          type="button"
+          className={`ind-toggle${value.vwapOn ? ' on' : ''}`}
+          onClick={() => onChange({ vwapOn: !value.vwapOn })}
+          disabled={disabled}
+          title="VWAPの表示 / 非表示（その日の寄り付きからの出来高加重平均）"
+        >
+          VWAP
+        </button>
+      </div>
+
       <div className={`ind-group${value.rsiOn ? ' on' : ''}`}>
         <button
           type="button"

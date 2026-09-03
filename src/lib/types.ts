@@ -43,6 +43,8 @@ export type IndicatorConfig = {
   maPeriods: number[];
   bb: { on: boolean; period: number; sigma: number };
   rsi: { on: boolean; period: number };
+  /** VWAP。本数の指定が無い（その日の寄り付きからの累計）ので真偽値だけ */
+  vwap: boolean;
 };
 
 /** インジケーターバーが持つUI状態 */
@@ -54,4 +56,5 @@ export type IndicatorUi = {
   bbSigma: number;
   rsiOn: boolean;
   rsiPeriod: number;
+  vwapOn: boolean;
 };

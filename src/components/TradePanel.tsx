@@ -3,7 +3,7 @@ import type { useTrading } from '../hooks/useTrading';
 import { buildBook } from '../lib/book';
 import { formatClock } from '../lib/csv';
 import { downloadCsv, tradesToCsv } from '../lib/csvfile';
-import { computePnl, LOT, type OrderSide } from '../lib/trading';
+import { computePnl, LOT, orderLabel, type OrderSide } from '../lib/trading';
 import { useHints, type HintText } from './Hint';
 
 /** 板に出す気配の本数（現在値を中心に上下） */
@@ -35,6 +35,14 @@ const HINTS: Record<string, HintText> = {
     title: 'お題 — 今日の目標',
     body: '日替わりの課題が右下に出ます。利益目標・勝率・大負けしない、など。達成すると緑になります。同じ日なら何度開いても同じお題です。',
   },
+  limit: {
+    title: '指値注文 — 値段を打ち込んで発注',
+    body: '板をダブルクリックする代わりに、売買・新規/返済・値段・株数を入力して注文できる小窓が開きます。出している注文の一覧と取消もここでできます。窓は見出しを掴んで移動、右下で大きさ変更、「—」で帯に畳めます。',
+  },
+  stop: {
+    title: '逆指値・利確 — 損切りと利確を自動で置く',
+    body: 'オンにしている間は、板・指値注文どちらから出した新規注文にも自動の返済が付きます。損切りは建値から幅ぶん不利な側の逆指値（触れたらそのときの値段で返済）、利確は有利な側の指値です。損と益は別々にオンにできます。',
+  },
   match: {
     title: '対戦 — botと同じ相場で競う',
     body: '逆張り・ブレイク・スキャルの3体と、同じ歩み値・同じ約定ルールで損益を競います。botは先読みできず、値段も動かせません。botの未約定の注文は板の端に色の点で出ます。どのbotに負けたかで、その日がどんな相場だったかが分かります。',
@@ -61,8 +69,15 @@ type Props = {
   onToggleChallenge: () => void;
   onAnalyze: () => void;
   onOverall: () => void;
-  toggles: { rules: boolean; ghost: boolean; daily: boolean; match: boolean };
-  onToggleView: (k: 'rules' | 'ghost' | 'daily' | 'match') => void;
+  toggles: {
+    rules: boolean;
+    ghost: boolean;
+    daily: boolean;
+    match: boolean;
+    limit: boolean;
+    stop: boolean;
+  };
+  onToggleView: (k: 'rules' | 'ghost' | 'daily' | 'match' | 'limit' | 'stop') => void;
   /** 前回のトレードが何件あるか。0ならゴーストは出せない */
   ghostCount: number;
   /** 対戦botが板に出している注文 */
@@ -88,7 +103,7 @@ export function TradePanel({
   botOrders,
   matchOn,
 }: Props) {
-  const { long, short, orders, trades, mode, lot, flash } = trading;
+  const { long, short, orders, trades, mode, lot, flash, stopCfg } = trading;
   const pnl = useMemo(
     () => computePnl({ long, short, realized: trading.realized }, last),
     [long, short, trading.realized, last],
@@ -120,14 +135,21 @@ export function TradePanel({
   // 固定中でなければ現在値が中央。現在値の行は画面上で動かない
   const rows = buildBook(last, frozen ?? last, tickSize, ROWS, Math.floor(clock));
 
-  /** 値段ごとの注文を引けるようにまとめる */
-  const bySide = new Map<string, { qty: number; ids: number[]; kind: string }>();
+  /**
+   * 値段ごとの注文を引けるようにまとめる。指値と逆指値は別のチップにするので別々に持つ。
+   * armed は「逆指値付きの新規」が混ざっているか（チップに印を付ける）
+   */
+  type Cell = { qty: number; ids: number[]; kind: string; armed: boolean };
+  const bySide = new Map<string, Cell>();
+  const stopAt = new Map<string, Cell>();
   for (const o of orders) {
     const key = `${o.side}@${o.price}`;
-    const e = bySide.get(key) ?? { qty: 0, ids: [], kind: o.kind };
+    const m = o.type === 'stop' ? stopAt : bySide;
+    const e = m.get(key) ?? { qty: 0, ids: [], kind: o.kind, armed: false };
     e.qty += o.qty;
     e.ids.push(o.id);
-    bySide.set(key, e);
+    if (o.stop !== undefined || o.profit !== undefined) e.armed = true;
+    m.set(key, e);
   }
 
   const order = (side: OrderSide, price: number) => {
@@ -136,8 +158,8 @@ export function TradePanel({
     trading.place(side, price, Math.floor(clock));
   };
 
-  const cancelAt = (side: OrderSide, price: number) => {
-    const e = bySide.get(`${side}@${price}`);
+  const cancelAt = (side: OrderSide, price: number, stop = false) => {
+    const e = (stop ? stopAt : bySide).get(`${side}@${price}`);
     if (!e) return;
     for (const id of e.ids) trading.cancel(id);
   };
@@ -345,10 +367,35 @@ export function TradePanel({
         <div className="bk-tools">
           <button
             type="button"
+            className={`ordbtn${toggles.limit ? ' on' : ''}`}
+            onClick={() => onToggleView('limit')}
+            disabled={disabled}
+            {...hint.bind('limit')}
+          >
+            指値注文
+          </button>
+          <button
+            type="button"
+            className={`ordbtn${toggles.stop ? ' on' : ''}${stopCfg.on || stopCfg.profitOn ? ' live' : ''}`}
+            onClick={() => onToggleView('stop')}
+            disabled={disabled}
+            {...hint.bind('stop')}
+          >
+            逆指値
+            {(stopCfg.on || stopCfg.profitOn) &&
+              ` ${[
+                stopCfg.on ? `損${nf.format(stopCfg.width)}` : '',
+                stopCfg.profitOn ? `益${nf.format(stopCfg.profitWidth)}` : '',
+              ]
+                .filter(Boolean)
+                .join('/')}`}
+          </button>
+          <button
+            type="button"
             className="bulk sell"
             onClick={() => trading.cancelBySide('sell')}
             disabled={sellCount === 0}
-            title="売り注文（新規・返済とも）をすべて取り消す"
+            title="売り注文（新規・返済・逆指値とも）をすべて取り消す"
           >
             一括取消{sellCount ? ` ${sellCount}` : ''}
           </button>
@@ -357,7 +404,7 @@ export function TradePanel({
             className="bulk buy"
             onClick={() => trading.cancelBySide('buy')}
             disabled={buyCount === 0}
-            title="買い注文（新規・返済とも）をすべて取り消す"
+            title="買い注文（新規・返済・逆指値とも）をすべて取り消す"
           >
             一括取消{buyCount ? ` ${buyCount}` : ''}
           </button>
@@ -379,6 +426,8 @@ export function TradePanel({
           {rows.map((r) => {
             const sellOrder = bySide.get(`sell@${r.price}`);
             const buyOrder = bySide.get(`buy@${r.price}`);
+            const sellStop = stopAt.get(`sell@${r.price}`);
+            const buyStop = stopAt.get(`buy@${r.price}`);
             const hit = flash && flash.price === r.price ? ` flash-${flash.side}` : '';
             const bots = botAt.get(r.price);
             return (
@@ -420,11 +469,21 @@ export function TradePanel({
                   {sellOrder && (
                     <button
                       type="button"
-                      className={`chip ${sellOrder.kind}`}
+                      className={`chip ${sellOrder.kind}${sellOrder.armed ? ' armed' : ''}`}
                       onClick={() => cancelAt('sell', r.price)}
-                      title={`${nf.format(sellOrder.qty)}株の${sellOrder.kind === 'open' ? '新規売り' : '返済買い'} — クリックで取消`}
+                      title={`${nf.format(sellOrder.qty)}株の${sellOrder.kind === 'open' ? '新規売り' : '買建の返済'}${sellOrder.armed ? '（損切り・利確付き）' : ''} — クリックで取消`}
                     >
                       {nf.format(sellOrder.qty)}
+                    </button>
+                  )}
+                  {sellStop && (
+                    <button
+                      type="button"
+                      className="chip stop"
+                      onClick={() => cancelAt('sell', r.price, true)}
+                      title={`逆指値 ${nf.format(sellStop.qty)}株の買建の返済（${nf.format(r.price)}以下で発動） — クリックで取消`}
+                    >
+                      {nf.format(sellStop.qty)}
                     </button>
                   )}
                 </span>
@@ -435,11 +494,21 @@ export function TradePanel({
                   {buyOrder && (
                     <button
                       type="button"
-                      className={`chip ${buyOrder.kind}`}
+                      className={`chip ${buyOrder.kind}${buyOrder.armed ? ' armed' : ''}`}
                       onClick={() => cancelAt('buy', r.price)}
-                      title={`${nf.format(buyOrder.qty)}株の${buyOrder.kind === 'open' ? '新規買い' : '返済売り'} — クリックで取消`}
+                      title={`${nf.format(buyOrder.qty)}株の${buyOrder.kind === 'open' ? '新規買い' : '売建の返済'}${buyOrder.armed ? '（損切り・利確付き）' : ''} — クリックで取消`}
                     >
                       {nf.format(buyOrder.qty)}
+                    </button>
+                  )}
+                  {buyStop && (
+                    <button
+                      type="button"
+                      className="chip stop"
+                      onClick={() => cancelAt('buy', r.price, true)}
+                      title={`逆指値 ${nf.format(buyStop.qty)}株の売建の返済（${nf.format(r.price)}以上で発動） — クリックで取消`}
+                    >
+                      {nf.format(buyStop.qty)}
                     </button>
                   )}
                 </span>
@@ -473,12 +542,13 @@ export function TradePanel({
             <button
               type="button"
               key={o.id}
-              className={`chip ${o.kind}`}
+              className={`chip ${o.type === 'stop' ? 'stop' : o.kind}${o.stop !== undefined || o.profit !== undefined ? ' armed' : ''}`}
               onClick={() => trading.cancel(o.id)}
-              title={`${nf.format(o.price)}円 ${o.side === 'buy' ? '買い' : '売り'}${o.kind === 'open' ? '新規' : '返済'} ${nf.format(o.qty)}株 — クリックで取消`}
+              title={`${orderLabel(o)}${o.stop !== undefined ? ` 損切り ${nf.format(o.stop)}` : ''}${o.profit !== undefined ? ` 利確 ${nf.format(o.profit)}` : ''} — クリックで取消`}
             >
               {nf.format(o.price)}
               {o.side === 'buy' ? '買' : '売'}
+              {o.type === 'stop' ? '逆' : o.kind === 'close' && o.from !== undefined ? '利' : ''}
             </button>
           ))}
         </div>
@@ -518,6 +588,16 @@ export function TradePanel({
                 <span className="hist-q">{nf.format(t.qty)}</span>
                 <span className="hist-px">
                   {nf.format(Math.round(t.entry))}→{nf.format(Math.round(t.exit))}
+                  {t.exitBy === 'stop' && (
+                    <i className="hist-stop" title="逆指値（損切り）で返済">
+                      逆
+                    </i>
+                  )}
+                  {t.exitBy === 'profit' && (
+                    <i className="hist-stop tp" title="自動の利確で返済">
+                      利
+                    </i>
+                  )}
                 </span>
                 <span className={`hist-p ${tone(t.pnl)}`}>{money(t.pnl)}</span>
               </div>

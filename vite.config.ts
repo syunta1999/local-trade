@@ -9,11 +9,28 @@ const LOG_DIR = join(DATA_DIR, 'challenges')
 /** 取り込むCSVの上限。歩み値1日分でも数MBなので十分 */
 const MAX_UPLOAD = 64 * 1024 * 1024
 
-/** 危険な文字とディレクトリ移動を落として "○○.csv" だけ通す */
+/**
+ * 危険な文字とディレクトリ移動を落として "○○.csv" だけ通す。
+ * 濁点・半濁点は結合文字(U+3099/309A)で来る。macOSのファイル名はNFDなので、
+ * これを落とすと「ジ」が「シ_」に化けて実ファイルに当たらなくなる。
+ */
+const NG_CHAR =
+  /[^\w.\-\u3005-\u3007\u3041-\u309f\u30a0-\u30ff\u3400-\u9fff\uf900-\ufaff\u{20000}-\u{3134f}]/gu
+
 function safeName(raw: string): string | null {
-  const name = basename(decodeURIComponent(raw)).replace(/[^\w.\-一-龥ぁ-んァ-ヶー]/g, '_')
+  const name = basename(decodeURIComponent(raw)).replace(NG_CHAR, '_')
   if (!name || name.startsWith('.') || !name.toLowerCase().endsWith('.csv')) return null
   return name
+}
+
+/**
+ * 実ファイル名を引き当てる。ブラウザからはNFCで来ることがあり、
+ * NFDで置かれている実体とは字面が違う。見つからなければそのまま返す（新規保存用）。
+ */
+async function realName(name: string): Promise<string> {
+  const names = await readdir(DATA_DIR).catch(() => [] as string[])
+  const want = name.normalize('NFC')
+  return names.find((n) => n.normalize('NFC') === want) ?? name
 }
 
 async function listCsv() {
@@ -53,15 +70,17 @@ function dataFilesApi(): Plugin {
         if (req.method === 'GET' && path.startsWith('/file/')) {
           const name = safeName(path.slice('/file/'.length))
           if (!name) return send(400, { error: 'CSVファイル名が不正です' })
-          readFile(join(DATA_DIR, name)).then(
-            (buf) => {
-              res.statusCode = 200
-              res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-              res.setHeader('Cache-Control', 'no-store')
-              res.end(buf)
-            },
-            () => send(404, { error: `${name} がありません` }),
-          )
+          realName(name)
+            .then((real) => readFile(join(DATA_DIR, real)))
+            .then(
+              (buf) => {
+                res.statusCode = 200
+                res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+                res.setHeader('Cache-Control', 'no-store')
+                res.end(buf)
+              },
+              () => send(404, { error: `${name} がありません` }),
+            )
           return
         }
 
@@ -85,16 +104,17 @@ function dataFilesApi(): Plugin {
           req.on('end', () => {
             if (aborted) return
             const body = Buffer.concat(chunks)
-            const target = join(DATA_DIR, name)
-            // 同名で中身も同じなら書き直さない
-            readFile(target)
-              .then((cur) => cur.equals(body))
-              .catch(() => false)
-              .then((same) =>
-                same
-                  ? send(200, { name, saved: false })
-                  : writeFile(target, body).then(() => send(200, { name, saved: true })),
-              )
+            // 既にある字面（NFD/NFC）に合わせる。合わせないと同じ銘柄が二重に並ぶ
+            realName(name)
+              .then(async (real) => {
+                const target = join(DATA_DIR, real)
+                // 同名で中身も同じなら書き直さない
+                const same = await readFile(target)
+                  .then((cur) => cur.equals(body))
+                  .catch(() => false)
+                if (!same) await writeFile(target, body)
+                send(200, { name: real, saved: !same })
+              })
               .catch((e) => send(500, { error: String(e) }))
           })
           return

@@ -67,6 +67,7 @@
   --bb-mid: #6f7a8a;
   --rsi-line: #ffb74d;
   --rsi-guide: #4a5361;
+  --vwap: #ff5ec8;
   --ghost: #8b7fd4;
   /* リプレイの赤枠。テーマで --up が緑寄りになっても「いつもの赤」で気づけるよう固定する */
   --replay: #e5484d;
@@ -2924,4 +2925,500 @@ select {
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+}
+
+/* ================= 指値注文・逆指値の小窓 ================= */
+
+/* 対戦・botの売買と同じ作法：見出しを掴んで移動、右下で大きさ変更、— で帯に畳む */
+.flt {
+  position: fixed;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  min-width: 240px;
+  min-height: 90px;
+  max-width: 96vw;
+  max-height: calc(100vh - 24px);
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  resize: both;
+}
+
+/* 畳むと見出しの帯だけになる。この状態でも掴んで動かせる */
+.flt.collapsed {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+}
+
+.flt header {
+  flex: 0 0 auto;
+  user-select: none;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: move;
+}
+
+.flt.collapsed header {
+  padding: 0;
+  border-bottom: none;
+}
+
+.flt header strong {
+  flex: 1;
+}
+
+.flt-aside {
+  color: var(--dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.flt .x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 3px;
+}
+
+.flt .x:hover {
+  color: var(--text);
+}
+
+/* 畳んだ帯に出す件数・幅 */
+.flt .grip b {
+  color: var(--dim);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.flt .grip b.on {
+  color: var(--accent);
+}
+
+.flt-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  font-size: 11px;
+}
+
+.flt-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.flt-note b {
+  color: var(--text);
+}
+
+/* ---- 入力の並び ---- */
+.frm-segs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.frm-segs .seg-btn {
+  flex: 1;
+  padding: 5px 0;
+}
+
+/* 買い・売りの選択は板と同じ色で */
+.seg-btn.buy.on {
+  background: color-mix(in srgb, var(--up) 55%, var(--sunken));
+  color: #fff;
+}
+
+.seg-btn.sell.on {
+  background: color-mix(in srgb, var(--down) 55%, var(--sunken));
+  color: #fff;
+}
+
+.frm-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.frm-k {
+  flex: 0 0 26px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.frm-sub {
+  color: var(--dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lot.wide input {
+  width: 84px;
+}
+
+/* 逆指値がオンのときに、この注文へ付く値段を出す */
+.ord-stop {
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ord-stop b {
+  font-size: 11px;
+}
+
+.ord-go {
+  height: 32px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--raise);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ord-go.buy:not(:disabled) {
+  border-color: var(--up);
+  background: color-mix(in srgb, var(--up) 26%, transparent);
+  color: var(--bid-fg);
+}
+
+.ord-go.sell:not(:disabled) {
+  border-color: var(--down);
+  background: color-mix(in srgb, var(--down) 26%, transparent);
+  color: var(--ask-fg);
+}
+
+.ord-go:hover:not(:disabled) {
+  filter: brightness(1.25);
+}
+
+.ord-go:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ord-msg {
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--sel) 16%, transparent);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.ord-msg.bad {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* ---- 注文の一覧 ---- */
+.ol {
+  display: grid;
+  gap: 2px;
+}
+
+.ol-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ol-legend {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.ol-empty {
+  padding: 4px 2px;
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.ol-row {
+  display: grid;
+  grid-template-columns: 18px auto 1fr auto auto 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: var(--deep);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-row .side {
+  text-align: center;
+  border-radius: 3px;
+  background: var(--sunken);
+}
+
+.ol-row .side.buy {
+  color: var(--bid-fg);
+}
+
+.ol-row .side.sell {
+  color: var(--ask-fg);
+}
+
+.ol-row .kind {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ol-row .kind.stop {
+  color: var(--accent);
+}
+
+.ol-row .px {
+  text-align: right;
+  font-weight: 600;
+}
+
+.ol-row .q {
+  color: var(--muted);
+}
+
+.ol-row .stopat {
+  min-width: 0;
+  color: var(--accent);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.ol-row .x {
+  padding: 0;
+  font-size: 11px;
+}
+
+/* ---- 逆指値・利確の設定 ---- */
+.stp-sec {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--deep);
+}
+
+.stp-sec.on {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.stp-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--sunken);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stp-toggle.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+/* 利確側は約定の「上げ」の色で。損切りの黄色と見分ける */
+.stp-toggle.tp.on {
+  border-color: var(--up);
+  background: color-mix(in srgb, var(--up) 16%, transparent);
+  color: var(--bid-fg);
+}
+
+.stp-sec:has(.stp-toggle.tp.on) {
+  border-color: color-mix(in srgb, var(--up) 40%, var(--border));
+}
+
+.stp-toggle.tp.on i {
+  background: var(--up);
+}
+
+/* スイッチの見た目 */
+.stp-toggle i {
+  position: relative;
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.stp-toggle i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left 0.15s, background 0.15s;
+}
+
+.stp-toggle.on i {
+  background: var(--accent);
+}
+
+.stp-toggle.on i::after {
+  left: 16px;
+  background: #fff;
+}
+
+.presets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.presets .mini {
+  flex: 1;
+  padding: 3px 0;
+}
+
+.stp-preview,
+.stp-cover {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stp-preview span,
+.stp-cover span {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--deep);
+}
+
+.stp-preview b {
+  color: var(--accent);
+}
+
+.stp-preview b.tp,
+.ord-stop b.tp {
+  color: var(--bid-fg);
+}
+
+.ol-row .kind.tp {
+  color: var(--bid-fg);
+}
+
+.stp-cover span {
+  color: var(--warn-fg);
+}
+
+.stp-cover span.ok {
+  color: var(--muted);
+}
+
+/* ---- 板の上のボタン（一括取消の上） ---- */
+.ordbtn {
+  padding: 5px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--sunken);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ordbtn:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--text);
+}
+
+.ordbtn.on {
+  border-color: var(--sel);
+  color: var(--text);
+}
+
+/* 逆指値がオンの間は黄色で光らせておく。付くのを忘れないように */
+.ordbtn.live {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.ordbtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---- 板のチップ ---- */
+.bk-ord {
+  gap: 1px;
+}
+
+/* 逆指値の返済注文。点線で指値と見分ける */
+.chip.stop {
+  min-width: 0;
+  padding: 1px 4px;
+  border-style: dashed;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+/* 逆指値付きの新規。下に黄色の線 */
+.chip.armed {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* 取引履歴で逆指値・利確による返済の印 */
+.hist-stop {
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-style: normal;
+  font-size: 8px;
+  vertical-align: 1px;
+}
+
+.hist-stop.tp {
+  background: color-mix(in srgb, var(--up) 20%, transparent);
+  color: var(--bid-fg);
 }

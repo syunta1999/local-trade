@@ -15,11 +15,15 @@ import {
 import { playAlert, playFill, playTape } from '../lib/sound';
 import {
   cancelOrder,
+  cancelProfits,
   cancelSide,
+  cancelStops,
   createTrading,
   LOT,
   matchTick,
   placeOrder,
+  profitPriceOf,
+  stopPriceOf,
   type Order,
   type OrderKind,
   type OrderSide,
@@ -30,6 +34,19 @@ import type { Tick } from '../lib/types';
 
 /** 直近の約定を板で光らせる時間(ms) */
 const FLASH_MS = 900;
+/** 発注エラーの表示時間(ms) */
+const MSG_MS = 2500;
+
+/**
+ * 逆指値・利確の設定。オンの間は新規注文すべてに、
+ * 損切り(on/width)は建値から width 円不利な側の逆指値、
+ * 利確(profitOn/profitWidth)は建値から profitWidth 円有利な側の指値が付く。
+ * 幅はどちらも円/株。ルールの「損切り幅」と同じ単位にしてある
+ */
+export type StopCfg = { on: boolean; width: number; profitOn: boolean; profitWidth: number };
+
+/** 発注の上書き。板のダブルクリックは持たないが、指値注文の窓は種類と株数を自分で持つ */
+export type PlaceOpt = { kind?: OrderKind; qty?: number };
 
 /** パネルの描画に必要なぶんだけ取り出した写し */
 export type TradingView = {
@@ -73,6 +90,15 @@ export function useTrading() {
   const [mode, setMode] = useState<OrderKind>('open');
   const [lot, setLot] = useState(LOT);
   const [message, setMessage] = useState<string | null>(null);
+  const msgTimer = useRef(0);
+  /** 逆指値の設定。発注はループから呼ばれることは無いが、置き方を揃えるため ref にも写す */
+  const [stopCfg, setStopCfgState] = useState<StopCfg>({
+    on: false,
+    width: 10,
+    profitOn: false,
+    profitWidth: 20,
+  });
+  const stopRef = useRef(stopCfg);
   /** 直近に約定した値段。板を光らせるだけの用途 */
   const [flash, setFlash] = useState<{ price: number; side: OrderSide } | null>(null);
   const flashTimer = useRef(0);
@@ -207,9 +233,28 @@ export function useTrading() {
     onTickRef.current = onTick;
   }, [onTick]);
 
-  /** 板をダブルクリックしたときの発注 */
+  const flashMessage = useCallback((text: string) => {
+    setMessage(text);
+    window.clearTimeout(msgTimer.current);
+    msgTimer.current = window.setTimeout(() => setMessage(null), MSG_MS);
+  }, []);
+
+  const setStopCfg = useCallback((patch: Partial<StopCfg>) => {
+    setStopCfgState((prev) => {
+      const next = { ...prev, ...patch };
+      stopRef.current = next;
+      return next;
+    });
+  }, []);
+
+  /**
+   * 発注。板のダブルクリックと指値注文の窓の両方から呼ばれる。
+   * 種類と株数を渡さなければ、板の上の「新規 / 返済」とロットを使う
+   */
   const place = useCallback(
-    (side: OrderSide, price: number, at: number) => {
+    (side: OrderSide, price: number, at: number, opt: PlaceOpt = {}) => {
+      const kind = opt.kind ?? mode;
+      const qty = opt.qty ?? lot;
       const st = stateRef.current;
       // 発注そのものは止めない。破ったことを見せるのが目的
       raise(
@@ -222,20 +267,32 @@ export function useTrading() {
           clock: at,
           clockMin: minuteOfDay(at),
           realized: st.realized,
-          order: { qty: lot, kind: mode },
+          order: { qty, kind },
         }),
       );
 
-      const res = placeOrder(st, { side, kind: mode, price, qty: lot, at });
+      // 損切り・利確がオンなら、新規には建値から幅ぶん離れた自動の返済を付ける
+      const cfg = stopRef.current;
+      const stop =
+        kind === 'open' && cfg.on && cfg.width > 0
+          ? stopPriceOf(side, price, cfg.width)
+          : undefined;
+      const profit =
+        kind === 'open' && cfg.profitOn && cfg.profitWidth > 0
+          ? profitPriceOf(side, price, cfg.profitWidth)
+          : undefined;
+
+      const res = placeOrder(st, { side, kind, price, qty, at, stop, profit });
       if (!res.ok) {
-        setMessage(res.error);
-        window.setTimeout(() => setMessage(null), 2500);
-        return;
+        flashMessage(res.error);
+        return false;
       }
       setMessage(null);
+      window.clearTimeout(msgTimer.current);
       commit();
+      return true;
     },
-    [mode, lot, commit, raise],
+    [mode, lot, commit, raise, flashMessage],
   );
 
   const noteCancel = useCallback(
@@ -270,6 +327,24 @@ export function useTrading() {
     },
     [commit, noteCancel],
   );
+
+  /** 板に出ている逆指値をすべて取り消す。設定をオフにしても出ているものは残るので、その掃除用 */
+  const cancelAllStops = useCallback(() => {
+    const n = cancelStops(stateRef.current);
+    if (n > 0) {
+      noteCancel(n);
+      commit();
+    }
+  }, [commit, noteCancel]);
+
+  /** 自動で出た利確をすべて取り消す */
+  const cancelAllProfits = useCallback(() => {
+    const n = cancelProfits(stateRef.current);
+    if (n > 0) {
+      noteCancel(n);
+      commit();
+    }
+  }, [commit, noteCancel]);
 
   /** シークやCSV差し替えで建玉と注文を無かったことにする。チャレンジの記録は残す */
   const reset = useCallback(() => {
@@ -331,6 +406,10 @@ export function useTrading() {
     place,
     cancel,
     cancelBySide,
+    cancelAllStops,
+    cancelAllProfits,
+    stopCfg,
+    setStopCfg,
     reset,
     noteSeek,
     challenge,

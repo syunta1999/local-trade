@@ -46,6 +46,18 @@ export type Settings = {
   footer: boolean;
   /** 配色テーマ */
   theme: string;
+  /** 逆指値（損切り）。オンの間は新規注文すべてに、建値から stopWidth 円不利な側の逆指値が付く */
+  stopOn: boolean;
+  stopWidth: number;
+  /** 利確。オンの間は新規注文すべてに、建値から profitWidth 円有利な側の指値が付く */
+  profitOn: boolean;
+  profitWidth: number;
+  /** 指値注文の窓の位置・大きさ・畳んでいるか */
+  limitBox: Box;
+  limitFold: boolean;
+  /** 逆指値設定の窓 */
+  stopBox: Box;
+  stopFold: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
     bbSigma: 2,
     rsiOn: false,
     rsiPeriod: 14,
+    vwapOn: false,
   },
   interval: 60,
   speed: 1,
@@ -74,6 +87,14 @@ export const DEFAULT_SETTINGS: Settings = {
   header: true,
   footer: true,
   theme: DEFAULT_THEME,
+  stopOn: false,
+  stopWidth: 10,
+  profitOn: false,
+  profitWidth: 20,
+  limitBox: { x: 0, y: 0, w: 300, h: 0 },
+  limitFold: false,
+  stopBox: { x: 0, y: 0, w: 280, h: 0 },
+  stopFold: false,
 };
 
 const b = (v: boolean) => (v ? '1' : '0');
@@ -88,6 +109,7 @@ export function settingsToRows(s: Settings): string[] {
     `ind.bbSigma,${s.ind.bbSigma}`,
     `ind.rsi,${b(s.ind.rsiOn)}`,
     `ind.rsiPeriod,${s.ind.rsiPeriod}`,
+    `ind.vwap,${b(s.ind.vwapOn)}`,
     `interval,${s.interval}`,
     `speed,${s.speed}`,
     `skipGaps,${b(s.skipGaps)}`,
@@ -106,6 +128,14 @@ export function settingsToRows(s: Settings): string[] {
     `chrome.header,${b(s.header)}`,
     `chrome.footer,${b(s.footer)}`,
     `theme,${s.theme}`,
+    `stop.on,${b(s.stopOn)}`,
+    `stop.width,${s.stopWidth}`,
+    `profit.on,${b(s.profitOn)}`,
+    `profit.width,${s.profitWidth}`,
+    `limit.box,${[s.limitBox.x, s.limitBox.y, s.limitBox.w, s.limitBox.h].join('|')}`,
+    `limit.fold,${b(s.limitFold)}`,
+    `stop.box,${[s.stopBox.x, s.stopBox.y, s.stopBox.w, s.stopBox.h].join('|')}`,
+    `stop.fold,${b(s.stopFold)}`,
   ];
 }
 
@@ -123,6 +153,8 @@ export function settingsFromCsv(text: string): Settings {
     sound: { ...DEFAULT_SETTINGS.sound },
     matchBox: { ...DEFAULT_SETTINGS.matchBox },
     botBox: { ...DEFAULT_SETTINGS.botBox },
+    limitBox: { ...DEFAULT_SETTINGS.limitBox },
+    stopBox: { ...DEFAULT_SETTINGS.stopBox },
   };
 
   const bool = (k: string, fb: boolean) => {
@@ -153,6 +185,7 @@ export function settingsFromCsv(text: string): Settings {
   s.ind.bbSigma = pos('ind.bbSigma', s.ind.bbSigma);
   s.ind.rsiOn = bool('ind.rsi', s.ind.rsiOn);
   s.ind.rsiPeriod = pos('ind.rsiPeriod', s.ind.rsiPeriod);
+  s.ind.vwapOn = bool('ind.vwap', s.ind.vwapOn);
 
   s.interval = pos('interval', s.interval);
   s.speed = pos('speed', s.speed);
@@ -184,5 +217,14 @@ export function settingsFromCsv(text: string): Settings {
   s.footer = bool('chrome.footer', s.footer);
   const th = map.get('theme');
   if (th && THEMES.some((t) => t.id === th)) s.theme = th;
+
+  s.stopOn = bool('stop.on', s.stopOn);
+  s.stopWidth = pos('stop.width', s.stopWidth);
+  s.profitOn = bool('profit.on', s.profitOn);
+  s.profitWidth = pos('profit.width', s.profitWidth);
+  s.limitBox = readBox('limit.box', s.limitBox);
+  s.limitFold = bool('limit.fold', s.limitFold);
+  s.stopBox = readBox('stop.box', s.stopBox);
+  s.stopFold = bool('stop.fold', s.stopFold);
   return s;
 }
