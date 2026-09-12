@@ -7,8 +7,8 @@ ind.bbSigma,2
 ind.rsi,0
 ind.rsiPeriod,14
 ind.vwap,1
-interval,180
-speed,300
+interval,60
+speed,1
 skipGaps,0
 sound.bgm,1
 sound.tape,1
@@ -24,12 +24,12 @@ bot.open,0
 bot.fold,0
 chrome.header,1
 chrome.footer,1
-theme,super-mario
+theme,casino
 stop.on,0
 stop.width,3
 profit.on,0
 profit.width,3
-limit.box,1390.12890625|400.796875|300|313
+limit.box,1323.515625|315.02734375|300|313
 limit.fold,0
 stop.box,1411.97265625|126.703125|280|321
 stop.fold,0

@@ -266,6 +266,272 @@ const OKU_MARK = svg(
   `<text x='100' y='150' text-anchor='middle' font-family='serif' font-weight='700' font-size='150' fill='#ffc300' fill-opacity='.07'>億</text>`,
 );
 
+/* ---- blueprint ---- */
+/** 図面の表題欄。左下に置く */
+const BLUEPRINT_TITLE = svg(
+  220,
+  64,
+  `<g fill='none' stroke='rgba(255,255,255,.45)' stroke-width='1'>` +
+    `<rect x='.5' y='.5' width='219' height='63'/>` +
+    `<line x1='0' y1='21' x2='220' y2='21'/><line x1='0' y1='42' x2='220' y2='42'/>` +
+    `<line x1='110' y1='0' x2='110' y2='64'/>` +
+    `</g>` +
+    `<g fill='rgba(255,255,255,.55)' font-family='monospace' font-size='9'>` +
+    `<text x='6' y='14'>PROJECT</text><text x='116' y='14'>TRADE LOG</text>` +
+    `<text x='6' y='35'>SHEET</text><text x='116' y='35'>1 / 1</text>` +
+    `<text x='6' y='56'>SCALE</text><text x='116' y='56'>1 : 1</text>` +
+    `</g>`,
+);
+
+/* ---- super saiyan ---- */
+/**
+ * 立ちのぼるオーラ。peaks は山の高さ(0..1)を左から順に。
+ * 山と山のあいだは自動で谷になる
+ */
+function flame(w: number, h: number, peaks: number[], fill: string, alpha: number): string {
+  const step = w / peaks.length;
+  let d = `M0 ${h}`;
+  peaks.forEach((p, i) => {
+    const l = (step * i + step * 0.15).toFixed(1);
+    const r = (step * (i + 1) - step * 0.15).toFixed(1);
+    const shoulder = (h * (1 - p * 0.45)).toFixed(1);
+    d += ` L${l} ${shoulder} L${(step * (i + 0.5)).toFixed(1)} ${(h * (1 - p)).toFixed(1)} L${r} ${shoulder}`;
+  });
+  return `<path d='${d} L${w} ${h} Z' fill='${fill}' fill-opacity='${alpha}'/>`;
+}
+const SAIYAN_AURA = svg(
+  600,
+  420,
+  `<defs><linearGradient id='a' x1='0' y1='1' x2='0' y2='0'>` +
+    `<stop offset='0' stop-color='#ffd000'/><stop offset='1' stop-color='#ffd000' stop-opacity='0'/>` +
+    `</linearGradient></defs>` +
+    flame(600, 420, [0.35, 0.6, 0.45, 0.85, 0.55, 1, 0.5, 0.8, 0.4, 0.65, 0.3], 'url(#a)', 0.28) +
+    flame(600, 420, [0.2, 0.45, 0.3, 0.6, 0.4, 0.75, 0.35, 0.55, 0.25, 0.45, 0.2], 'url(#a)', 0.4),
+);
+const SAIYAN_SPARKS = dotTile(240, 200, '#ffe066', [
+  [30, 40, 1.4, 0.8],
+  [90, 20, 1, 0.6],
+  [150, 70, 1.8, 0.9],
+  [210, 30, 1.1, 0.55],
+  [60, 120, 1.2, 0.7],
+  [130, 150, 1.6, 0.85],
+  [200, 130, 0.9, 0.5],
+  [20, 180, 1.3, 0.65],
+  [110, 100, 0.8, 0.45],
+  [180, 180, 1.5, 0.75],
+]);
+
+/* ---- candy pop ---- */
+/** 渦巻きキャンディ。渦は短い線分をつないで描く */
+const LOLLIPOP = (() => {
+  let d = '';
+  for (let t = 0; t <= 6.5 * Math.PI; t += 0.15) {
+    const r = 2 + t * 2;
+    d += `${d ? ' L' : 'M'}${(45 + r * Math.cos(t)).toFixed(1)} ${(45 + r * Math.sin(t)).toFixed(1)}`;
+  }
+  return svg(
+    90,
+    160,
+    `<rect x='42' y='86' width='6' height='72' rx='3' fill='#ffffff' stroke='#e8b4c8' stroke-width='1'/>` +
+      `<circle cx='45' cy='45' r='43' fill='#ffffff' stroke='#ff2d95' stroke-width='2'/>` +
+      `<path d='${d}' fill='none' stroke='#ff2d95' stroke-width='5' stroke-linecap='round'/>`,
+  );
+})();
+/** チョコスプレー。色と向きを散らす */
+const SPRINKLES = svg(
+  180,
+  180,
+  (
+    [
+      [20, 30, 20, '#ff2d95'],
+      [70, 15, -35, '#1e90ff'],
+      [130, 40, 60, '#ffcc00'],
+      [40, 95, 10, '#17b890'],
+      [110, 110, -60, '#ff2d95'],
+      [160, 140, 25, '#1e90ff'],
+      [15, 150, -20, '#ffcc00'],
+      [85, 160, 50, '#17b890'],
+      [150, 80, -10, '#c026d3'],
+    ] as [number, number, number, string][]
+  )
+    .map(
+      ([x, y, rot, c]) =>
+        `<rect x='${x}' y='${y}' width='12' height='4' rx='2' fill='${c}' fill-opacity='.5' transform='rotate(${rot} ${x + 6} ${y + 2})'/>`,
+    )
+    .join(''),
+);
+
+/* ---- neon tokyo ---- */
+/** 雨の筋。長さと位置をばらして、繰り返しが目に付かないようにする */
+const RAIN = svg(
+  200,
+  240,
+  (
+    [
+      [10, 0, 38],
+      [46, 60, 52],
+      [82, 20, 30],
+      [118, 110, 60],
+      [150, 10, 44],
+      [186, 90, 36],
+      [30, 150, 58],
+      [100, 180, 40],
+      [168, 170, 50],
+      [64, 200, 34],
+    ] as [number, number, number][]
+  )
+    .map(
+      ([x, y, len]) =>
+        `<line x1='${x}' y1='${y}' x2='${x - 3}' y2='${y + len}' stroke='rgba(190,230,255,.28)' stroke-width='1'/>`,
+    )
+    .join(''),
+);
+/** 縦書きのネオン看板。同じ文字を太い滲みと細い芯で重ねて光らせる */
+function neonSign(chars: string[], color: string, size: number): string {
+  const w = size + 24;
+  const h = chars.length * (size + 8) + 16;
+  const glyphs = (attrs: string) =>
+    chars
+      .map(
+        (c, i) =>
+          `<text x='${w / 2}' y='${8 + (i + 1) * (size + 8) - 6}' text-anchor='middle' font-family='sans-serif' font-weight='700' font-size='${size}' ${attrs}>${c}</text>`,
+      )
+      .join('');
+  return svg(
+    w,
+    h,
+    `<rect x='2' y='2' width='${w - 4}' height='${h - 4}' rx='6' fill='none' stroke='${color}' stroke-opacity='.45' stroke-width='2'/>` +
+      glyphs(`fill='none' stroke='${color}' stroke-width='6' stroke-opacity='.2' stroke-linejoin='round'`) +
+      glyphs(`fill='${color}' fill-opacity='.6'`),
+  );
+}
+const NEON_OPEN = neonSign(['営', '業', '中'], '#ff2ea6', 34);
+const NEON_BAR = neonSign(['呑'], '#00e5ff', 40);
+
+/* ---- 電光掲示板 ---- */
+/** LEDが6段並んだティッカーの帯。時間軸のすぐ上に敷く */
+const LED_STRIP = svg(
+  6,
+  36,
+  Array.from({ length: 6 }, (_, i) => `<circle cx='3' cy='${3 + i * 6}' r='1.6' fill='#ffb000' fill-opacity='.22'/>`).join(''),
+);
+
+/* ---- 夜桜 ---- */
+/** 花びら。先が少しへこんだ滴の形 */
+const PETALS = svg(
+  260,
+  220,
+  (
+    [
+      [30, 40, 20, 0.7],
+      [90, 20, -40, 0.5],
+      [150, 60, 70, 0.8],
+      [220, 30, 15, 0.45],
+      [60, 120, -70, 0.6],
+      [130, 140, 30, 0.5],
+      [200, 110, -20, 0.75],
+      [240, 180, 50, 0.4],
+      [20, 190, -30, 0.55],
+      [110, 200, 80, 0.65],
+      [170, 190, -55, 0.5],
+      [80, 80, 45, 0.35],
+    ] as [number, number, number, number][]
+  )
+    .map(
+      ([x, y, rot, a]) =>
+        `<path d='M0,-7 Q6,-2 3,5 Q0,2 -3,5 Q-6,-2 0,-7' fill='#ff9ec8' fill-opacity='${a}' transform='translate(${x} ${y}) rotate(${rot})'/>`,
+    )
+    .join(''),
+);
+/** 左上から伸びる枝と花の房 */
+const BRANCH = (() => {
+  const blossom = (x: number, y: number, r: number) =>
+    Array.from({ length: 5 }, (_, i) => {
+      const a = (i / 5) * Math.PI * 2;
+      return `<circle cx='${(x + Math.cos(a) * r).toFixed(1)}' cy='${(y + Math.sin(a) * r).toFixed(1)}' r='${r}' fill='#ffb3d1' fill-opacity='.85'/>`;
+    }).join('') + `<circle cx='${x}' cy='${y}' r='${r * 0.5}' fill='#ffe066'/>`;
+  const stroke = `fill='none' stroke='#2a1a24' stroke-linecap='round'`;
+  return svg(
+    340,
+    200,
+    `<path d='M0 20 C 60 30, 120 60, 200 70 S 300 60, 340 90' ${stroke} stroke-width='6'/>` +
+      `<path d='M120 52 C 150 30, 180 25, 210 10' ${stroke} stroke-width='4'/>` +
+      `<path d='M230 74 C 250 100, 270 120, 300 130' ${stroke} stroke-width='4'/>` +
+      blossom(70, 32, 4) +
+      blossom(140, 46, 5) +
+      blossom(185, 22, 4) +
+      blossom(215, 12, 3.5) +
+      blossom(240, 72, 5) +
+      blossom(270, 112, 4) +
+      blossom(300, 132, 4.5) +
+      blossom(320, 84, 4),
+  );
+})();
+
+/* ---- minecraft cave ---- */
+/** 決まった並びの疑似乱数。柄が毎回同じになる */
+function seeded(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+/**
+ * 石ブロックのタイル。8pxのドット4×4で1ブロック、8×8ブロックのうち6つが鉱石。
+ * タイルを大きめにして、鉱石の並びが繰り返しに見えないようにする。
+ * 鉱石はローソクと同じ色にならないよう少し沈める
+ */
+const STONE = (() => {
+  const rnd = seeded(7);
+  const shades = ['#2b2b2b', '#303030', '#353535', '#3a3a3a', '#262626'];
+  const ores: Record<number, string> = {
+    5: '#4fc8d8',
+    18: '#d9b52e',
+    27: '#d63030',
+    38: '#111111',
+    44: '#d9b52e',
+    57: '#111111',
+  };
+  let body = `<g shape-rendering='crispEdges'><rect width='256' height='256' fill='#1a1a1a'/>`;
+  for (let b = 0; b < 64; b++) {
+    const bx = b % 8;
+    const by = Math.floor(b / 8);
+    for (let py = 0; py < 4; py++) {
+      for (let px = 0; px < 4; px++) {
+        const speck = ores[b] !== undefined && rnd() < 0.35;
+        const fill = speck ? ores[b] : shades[Math.floor(rnd() * shades.length)];
+        // ブロックの左と上に1pxの目地を残す
+        const x = bx * 32 + px * 8 + (px === 0 ? 1 : 0);
+        const y = by * 32 + py * 8 + (py === 0 ? 1 : 0);
+        body += `<rect x='${x}' y='${y}' width='${px === 0 ? 7 : 8}' height='${py === 0 ? 7 : 8}' fill='${fill}'/>`;
+      }
+    }
+  }
+  return svg(256, 256, body + '</g>');
+})();
+/** 溶岩の帯 */
+const LAVA_ROW = (() => {
+  const rnd = seeded(3);
+  const c = ['#ff7a00', '#ff9a1a', '#ffb830', '#ff5a00'];
+  let body = `<g shape-rendering='crispEdges'>`;
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 8; x++) {
+      body += `<rect x='${x * 8}' y='${y * 8}' width='8' height='8' fill='${c[Math.floor(rnd() * c.length)]}'/>`;
+    }
+  }
+  return svg(64, 24, body + '</g>');
+})();
+/** たいまつ */
+const TORCH = svg(
+  16,
+  40,
+  `<g shape-rendering='crispEdges'>` +
+    `<rect x='5' y='16' width='6' height='24' fill='#6b4a1e'/><rect x='5' y='16' width='2' height='24' fill='#8a6430'/>` +
+    `<rect x='4' y='8' width='8' height='8' fill='#ffd54a'/><rect x='6' y='2' width='4' height='6' fill='#ff8c1a'/>` +
+    `</g>`,
+);
+
 /** hsl を sRGB の相対輝度に直す（WCAGと同じ式） */
 function luminance(h: number, s: number, l: number): number {
   const k = (n: number) => (n + h / 30) % 12;
@@ -1233,6 +1499,286 @@ export const THEMES: Theme[] = [
         `linear-gradient(180deg, rgba(255,195,0,.24), rgba(255,195,0,.06) 32%, transparent 60%)`,
         // 光の筋
         `repeating-linear-gradient(112deg, transparent 0 70px, rgba(255,215,0,.045) 70px 100px)`,
+      ),
+    },
+  },
+  {
+    id: 'blueprint',
+    label: 'blueprint',
+    note: '青写真に白い方眼。橙と水色の線',
+    vars: {
+      '--bg': '#0b3d91',
+      '--fg': '#ffffff',
+      '--edge': '#ffffff',
+      // 青の補色の橙がいちばん目立つので上げに
+      '--up': '#ff8c00',
+      '--down': '#7ad7ff',
+      '--accent': '#ffe066',
+      '--sel': '#3f7fe0',
+      '--ok': '#4ade80',
+      '--ma-5': '#ffe066',
+      '--ma-10': '#ffb060',
+      '--ma-25': '#4ade80',
+      '--ma-50': '#a5f3fc',
+      '--ma-75': '#d8b4fe',
+      '--ma-100': '#f9a8d4',
+      '--ma-200': '#93a8c8',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#4a78c8',
+      '--rsi-line': '#ffe066',
+      '--rsi-guide': '#2a5aa8',
+      '--vwap': '#ff5fa8',
+      '--ghost': '#d8b4fe',
+      '--bot-fade': '#7ad7ff',
+      '--bot-break': '#ffe066',
+      '--bot-scalp': '#d8b4fe',
+      '--bg-art': art(
+        `${BLUEPRINT_TITLE} left 14px bottom ${AXIS_H + 12}px / 220px 64px no-repeat`,
+        // 太い線は120px、細い線は24pxごと
+        `repeating-linear-gradient(90deg, rgba(255,255,255,.22) 0 1px, transparent 1px 120px)`,
+        `repeating-linear-gradient(180deg, rgba(255,255,255,.22) 0 1px, transparent 1px 120px)`,
+        `repeating-linear-gradient(90deg, rgba(255,255,255,.09) 0 1px, transparent 1px 24px)`,
+        `repeating-linear-gradient(180deg, rgba(255,255,255,.09) 0 1px, transparent 1px 24px)`,
+      ),
+    },
+  },
+  {
+    id: 'super-saiyan',
+    label: 'super saiyan',
+    note: '下から立ちのぼる金のオーラ。金と青',
+    vars: {
+      '--bg': '#05061a',
+      '--fg': '#fff8e1',
+      '--edge': '#ffffff',
+      '--up': '#ffd000',
+      '--down': '#4dc3ff',
+      '--accent': '#ff7a00',
+      '--sel': '#3550c8',
+      '--ok': '#7dff5a',
+      '--ma-5': '#ffd000',
+      '--ma-10': '#ff7a00',
+      '--ma-25': '#7dff5a',
+      '--ma-50': '#8fe3ff',
+      '--ma-75': '#c9a3ff',
+      '--ma-100': '#ff8fb8',
+      '--ma-200': '#9aa0b8',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#3a3f6a',
+      '--rsi-line': '#ffd000',
+      '--rsi-guide': '#22264a',
+      '--vwap': '#ff3ea5',
+      '--ghost': '#c9a3ff',
+      '--bot-fade': '#8fe3ff',
+      '--bot-break': '#ffd000',
+      '--bot-scalp': '#c9a3ff',
+      '--bg-art': art(
+        `${SAIYAN_SPARKS} repeat`,
+        `${SAIYAN_AURA} center bottom ${AXIS_H}px / 600px 420px no-repeat`,
+        `radial-gradient(ellipse 65% 60% at 50% 100%, rgba(255,208,0,.32), rgba(255,140,0,.1) 55%, transparent 72%)`,
+        `linear-gradient(180deg, #05061a 0%, #0c1240 100%)`,
+      ),
+    },
+  },
+  {
+    id: 'candy-pop',
+    label: 'candy pop',
+    note: '白地にキャンディの縞とスプレー。ピンクとソーダ',
+    light: true,
+    vars: {
+      '--bg': '#fff7fb',
+      '--fg': '#2a1030',
+      '--edge': '#120818',
+      '--up': '#ff2d95',
+      '--down': '#1e90ff',
+      '--accent': '#e6b800',
+      '--sel': '#c026d3',
+      '--sel-bg': '#c026d3',
+      '--ok': '#17b890',
+      '--shadow': 'rgba(90, 40, 90, 0.18)',
+      '--ma-5': '#d9a400',
+      '--ma-10': '#e8632a',
+      '--ma-25': '#17b890',
+      '--ma-50': '#0aa3b5',
+      '--ma-75': '#8b5cf6',
+      '--ma-100': '#d946a8',
+      '--ma-200': '#8a7f8f',
+      '--ma-x': '#3a2a45',
+      '--bb-band': '#b088a8',
+      '--bb-mid': '#d4b8cc',
+      '--rsi-line': '#d9a400',
+      '--rsi-guide': '#f0d8e8',
+      '--vwap': '#b8006e',
+      '--ghost': '#7c4dbf',
+      '--bot-fade': '#0a86c8',
+      '--bot-break': '#d9a400',
+      '--bot-scalp': '#9b4fd6',
+      '--bg-art': art(
+        `${LOLLIPOP} left 26px bottom ${AXIS_H + 14}px / 90px 160px no-repeat`,
+        `${SPRINKLES} repeat`,
+        `radial-gradient(ellipse 40% 30% at 90% 0%, rgba(30,144,255,.12), transparent 70%)`,
+        `repeating-linear-gradient(45deg, rgba(255,45,149,.07) 0 22px, transparent 22px 48px)`,
+      ),
+    },
+  },
+  {
+    id: 'neon-tokyo',
+    label: 'neon tokyo',
+    note: '雨の夜の街。ネオン看板と濡れた路面',
+    vars: {
+      '--bg': '#0a0714',
+      '--fg': '#f8f0ff',
+      '--edge': '#ffffff',
+      '--up': '#ff2ea6',
+      '--down': '#00e5ff',
+      '--accent': '#ffe600',
+      '--sel': '#6a2bd6',
+      '--ok': '#39ff88',
+      '--ma-5': '#ffe600',
+      '--ma-10': '#ff8a1a',
+      '--ma-25': '#39ff88',
+      '--ma-50': '#7fb8ff',
+      '--ma-75': '#b98cff',
+      '--ma-100': '#ff8fd0',
+      '--ma-200': '#9a8cb8',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#4a3a7a',
+      '--rsi-line': '#ffe600',
+      '--rsi-guide': '#2a1f4a',
+      '--vwap': '#b6ff3d',
+      '--ghost': '#c4a5ff',
+      '--bot-fade': '#00e5ff',
+      '--bot-break': '#ffe600',
+      '--bot-scalp': '#b98cff',
+      '--bg-art': art(
+        `${RAIN} repeat`,
+        // 看板は値段軸に被らないよう右端から離す
+        `${NEON_OPEN} right 90px top 36px / 58px 142px no-repeat`,
+        `${NEON_BAR} left 40px top 70px / 64px 64px no-repeat`,
+        // 濡れた路面に映るネオン
+        `radial-gradient(ellipse 14% 45% at 84% 100%, rgba(255,46,166,.35), transparent 70%)`,
+        `radial-gradient(ellipse 12% 40% at 10% 100%, rgba(0,229,255,.3), transparent 70%)`,
+        `radial-gradient(ellipse 10% 30% at 50% 100%, rgba(255,230,0,.18), transparent 70%)`,
+        `linear-gradient(0deg, rgba(255,255,255,.06), transparent 25%)`,
+      ),
+    },
+  },
+  {
+    id: 'led-board',
+    label: '電光掲示板',
+    note: '黒地にLEDの粒。赤と緑のLED、文字はアンバー',
+    vars: {
+      '--bg': '#050505',
+      '--fg': '#ffcf70',
+      '--edge': '#ffffff',
+      '--up': '#ff2e2e',
+      '--down': '#2eff5e',
+      '--accent': '#ffb000',
+      '--sel': '#7a3a00',
+      '--ok': '#2eff5e',
+      '--ma-5': '#ffb000',
+      '--ma-10': '#ff7a00',
+      '--ma-25': '#c8ff2e',
+      '--ma-50': '#2ee5ff',
+      '--ma-75': '#b46bff',
+      '--ma-100': '#ff5fa8',
+      '--ma-200': '#8a7a5a',
+      '--ma-x': '#ffcf70',
+      '--bb-band': '#ffe8b0',
+      '--bb-mid': '#5a4a20',
+      '--rsi-line': '#ffb000',
+      '--rsi-guide': '#2e2408',
+      '--vwap': '#ffffff',
+      '--ghost': '#b46bff',
+      '--bot-fade': '#2ee5ff',
+      '--bot-break': '#ffb000',
+      '--bot-scalp': '#b46bff',
+      '--bg-art': art(
+        // 端を暗くしてブラウン管の縁のように
+        `radial-gradient(ellipse 70% 70% at 50% 50%, transparent 60%, rgba(0,0,0,.55) 100%)`,
+        `${LED_STRIP} left 0 bottom ${AXIS_H}px / 6px 36px repeat-x`,
+        // 消えているLED
+        `radial-gradient(circle at 3px 3px, rgba(255,176,0,.12) 0 1.1px, transparent 1.7px) 0 0 / 6px 6px repeat`,
+      ),
+    },
+  },
+  {
+    id: 'yozakura',
+    label: '夜桜',
+    note: '黒に舞う花びらと枝、提灯の明かり',
+    vars: {
+      '--bg': '#0b0710',
+      '--fg': '#fff0f5',
+      '--edge': '#ffffff',
+      '--up': '#ff6fa8',
+      '--down': '#8fd3ff',
+      '--accent': '#ffb347',
+      '--sel': '#a03a78',
+      '--ok': '#7ddc6b',
+      '--ma-5': '#ffb347',
+      '--ma-10': '#ff8a5b',
+      '--ma-25': '#7ddc6b',
+      '--ma-50': '#5fc8d0',
+      '--ma-75': '#b58cff',
+      '--ma-100': '#ff9ec8',
+      '--ma-200': '#9a8a9a',
+      '--ma-x': '#fff0f5',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#5a3a5a',
+      '--rsi-line': '#ffb347',
+      '--rsi-guide': '#3a2238',
+      '--vwap': '#ffee55',
+      '--ghost': '#d9c8ff',
+      '--bot-fade': '#8fd3ff',
+      '--bot-break': '#ffb347',
+      '--bot-scalp': '#b58cff',
+      '--bg-art': art(
+        `${BRANCH} left 0 top 8px / 340px 200px no-repeat`,
+        `${PETALS} repeat`,
+        // 提灯の明かり
+        `radial-gradient(ellipse 30% 25% at 18% 100%, rgba(255,140,60,.35), transparent 70%)`,
+        `radial-gradient(ellipse 26% 22% at 72% 100%, rgba(255,140,60,.28), transparent 70%)`,
+      ),
+    },
+  },
+  {
+    id: 'minecraft-cave',
+    label: 'minecraft cave',
+    note: '石ブロックの洞窟。鉱石ときらめきと溶岩',
+    vars: {
+      '--bg': '#1f1f1f',
+      '--fg': '#f0f0f0',
+      '--edge': '#ffffff',
+      '--up': '#ff3030',
+      '--down': '#5ff1ff',
+      '--accent': '#ffd83d',
+      '--sel': '#2e6b3a',
+      '--ok': '#17dd62',
+      '--ma-5': '#ffd83d',
+      '--ma-10': '#ff8c1a',
+      '--ma-25': '#17dd62',
+      '--ma-50': '#4a7dff',
+      '--ma-75': '#b46bff',
+      '--ma-100': '#ff8fb0',
+      '--ma-200': '#9a9a9a',
+      '--ma-x': '#ffffff',
+      '--bb-band': '#ffffff',
+      '--bb-mid': '#4a4a4a',
+      '--rsi-line': '#ffd83d',
+      '--rsi-guide': '#333333',
+      '--vwap': '#ff3ea5',
+      '--ghost': '#c4b5fd',
+      '--bot-fade': '#4a7dff',
+      '--bot-break': '#ffd83d',
+      '--bot-scalp': '#b46bff',
+      '--bg-art': art(
+        `${TORCH} left 40px bottom ${AXIS_H + 64}px / 16px 40px no-repeat`,
+        `radial-gradient(circle at 48px calc(100% - ${AXIS_H + 96}px), rgba(255,200,80,.35), transparent 140px)`,
+        `${LAVA_ROW} left 0 bottom ${AXIS_H}px / 64px 24px repeat-x`,
+        `linear-gradient(0deg, rgba(255,110,0,.35) ${AXIS_H + 24}px, transparent ${AXIS_H + 150}px)`,
+        `${STONE} repeat`,
       ),
     },
   },

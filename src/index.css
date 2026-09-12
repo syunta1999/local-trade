@@ -1268,18 +1268,6 @@ body {
   flex-shrink: 0;
 }
 
-.set-btn {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.set-btn.on,
-.set-btn:hover {
-  color: var(--text);
-}
-
 .set-pop {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -2786,18 +2774,27 @@ select {
 
 /* ================= 機能の説明 ================= */
 
-.help-btn {
+/* 説明・設定・戦略。三つとも同じ見た目のツールボタンで揃える */
+.tool-btn {
   flex-shrink: 0;
   height: 34px;
   padding: 0 16px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  background: var(--sel-dim);
+  background: var(--raise);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.tool-btn:hover:not(:disabled) {
+  background: var(--raise-2);
   border-color: var(--sel-bg);
 }
 
-.help-btn:hover {
-  background: var(--sel-bg);
+/* 開いているあいだは押されたまま。設定・戦略の窓が出ているのが分かる */
+.tool-btn.on {
+  background: var(--sel-dim);
+  border-color: var(--sel-bg);
 }
 
 .help {
@@ -3445,4 +3442,170 @@ select {
 .hist-stop.tp {
   background: color-mix(in srgb, var(--up) 20%, transparent);
   color: var(--bid-fg);
+}
+
+/* ================= 戦略の図 ================= */
+
+/* ヘッダー右端。戦略ボタンと畳むボタンを並べる */
+.top-acts {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.strat {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.strat-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.strat-tab {
+  display: inline-flex;
+  align-items: center;
+  background: var(--raise);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.strat-tab button {
+  height: 24px;
+  max-width: 240px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strat-tab.on {
+  background: var(--sel-dim);
+  border-color: var(--sel-bg);
+}
+
+.strat-tab.on button {
+  color: var(--text);
+}
+
+.strat-tab .strat-x {
+  padding: 0 7px;
+  border-left: 1px solid var(--border);
+  font-size: 9px;
+}
+
+.strat-tab .strat-x:hover {
+  color: var(--down);
+}
+
+.strat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  text-align: center;
+}
+
+/* ドロップ中の当たり判定を見せる */
+.strat-body.over {
+  outline: 2px dashed var(--sel-bg);
+  outline-offset: -6px;
+}
+
+/*
+ * 白い紙。戦略の図は黒い文字で描かれていることが多く、暗い画面にそのまま置くと
+ * 読めない。テーマに関係なくここだけ明るくして、図を紙の上に載せる
+ */
+.strat-sheet {
+  display: inline-block;
+  padding: 12px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px var(--shadow);
+  max-width: 100%;
+}
+
+.strat-sheet img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 230px);
+}
+
+/*
+ * SVGは viewBox だけで大きさを持たないことが多い。幅を与えないと 300px に潰れる。
+ * 紙（inline-block）は中身に合わせて縮むので、% ではなく画面の幅から決める
+ */
+.strat-sheet img.svg {
+  width: min(1040px, calc(100vw - 92px));
+  max-height: none;
+}
+
+/* 拡大は原寸。はみ出したぶんは窓の中でスクロールする */
+.strat-sheet.zoom {
+  max-width: none;
+}
+
+.strat-sheet.zoom img {
+  max-width: none;
+  max-height: none;
+}
+
+.strat-sheet.zoom img.svg {
+  width: 1600px;
+}
+
+.strat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 240px;
+  padding: 20px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.strat-empty b {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.strat-empty:hover {
+  border-color: var(--sel-bg);
+  color: var(--text);
+}
+
+.strat-err {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 14px 12px;
+  color: var(--down);
+  font-size: 11px;
 }

@@ -8,6 +8,7 @@ import { Help } from './components/Help';
 import { LimitOrder } from './components/LimitOrder';
 import { MatchCard, MatchResult } from './components/Match';
 import { StopSetting } from './components/StopSetting';
+import { StrategyButton } from './components/Strategy';
 import { RulePanel } from './components/RulePanel';
 import { Tape } from './components/Tape';
 import { TradePanel } from './components/TradePanel';
@@ -714,14 +715,17 @@ export default function App() {
           <Stat label="VWAP" value={vwap ? vwap.toFixed(2) : '—'} />
         </div>
 
-          <button
-            type="button"
-            className="chrome-x"
-            onClick={() => toggleChrome('header')}
-            title="ヘッダーを閉じる（チャートが広がります）"
-          >
-            ▲
-          </button>
+          <div className="top-acts">
+            <StrategyButton />
+            <button
+              type="button"
+              className="chrome-x"
+              onClick={() => toggleChrome('header')}
+              title="ヘッダーを閉じる（チャートが広がります）"
+            >
+              ▲
+            </button>
+          </div>
         </header>
       ) : (
         <button

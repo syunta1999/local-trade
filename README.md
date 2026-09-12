@@ -528,7 +528,8 @@ botごとに小さな**ローソク足**があり（足の種類はメインの�
 ghost mansion / happy purple / japan / usa / god zeus / rising sun / casino / death metal /
 egypt / atlantis / random
 
-柄物: super mario / doraemon / sunset drive / brick alley / to the moon / lava / retro RPG / 億り人
+柄物: super mario / doraemon / sunset drive / brick alley / to the moon / lava / retro RPG / 億り人 /
+blueprint / super saiyan / candy pop / neon tokyo / 電光掲示板 / 夜桜 / minecraft cave
 
 色は **index.css の CSS変数だけ**が出どころ。面や文字の階調は `color-mix()` で
 `--bg` と `--fg` から作っているので、テーマが指定するのは実質7色だけで済む。

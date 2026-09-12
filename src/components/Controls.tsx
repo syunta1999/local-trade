@@ -220,7 +220,7 @@ export function Controls({
         </div>
 
         <div className="seek-end">
-          <button type="button" className="btn help-btn" onClick={onHelp} title="各機能の説明を開く">
+          <button type="button" className="btn tool-btn" onClick={onHelp} title="各機能の説明を開く">
             説明
           </button>
           <SettingsMenu
@@ -396,12 +396,12 @@ function SettingsMenu({
     <div className="set-menu" ref={box}>
       <button
         type="button"
-        className={`btn set-btn${open ? ' on' : ''}`}
+        className={`btn tool-btn${open ? ' on' : ''}`}
         onClick={() => (open ? close() : setOpen(true))}
         title="音・配色・記録の設定"
         aria-expanded={open}
       >
-        ⚙ 設定
+        設定
       </button>
 
       {open && (
