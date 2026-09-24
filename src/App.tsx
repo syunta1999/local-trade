@@ -9,6 +9,7 @@ import { LimitOrder } from './components/LimitOrder';
 import { MatchCard, MatchResult } from './components/Match';
 import { StopSetting } from './components/StopSetting';
 import { StrategyButton } from './components/Strategy';
+import { DiaryButton } from './components/Diary';
 import { RulePanel } from './components/RulePanel';
 import { Tape } from './components/Tape';
 import { TradePanel } from './components/TradePanel';
@@ -717,6 +718,7 @@ export default function App() {
 
           <div className="top-acts">
             <StrategyButton />
+            <DiaryButton />
             <button
               type="button"
               className="chrome-x"
