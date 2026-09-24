@@ -3456,9 +3456,10 @@ select {
 }
 
 .strat {
+  --strat-list: 220px;
   display: flex;
   flex-direction: column;
-  width: min(1100px, 100%);
+  width: min(1320px, 100%);
   max-height: 100%;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -3466,60 +3467,59 @@ select {
   overflow: hidden;
 }
 
-.strat-tabs {
-  flex: 0 0 auto;
+/* 左に一覧、右に図。機能の説明と同じ組み方 */
+.strat-main {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
 }
 
-.strat-tab {
-  display: inline-flex;
-  align-items: center;
-  background: var(--raise);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow: hidden;
+.strat-list {
+  flex: 0 0 var(--strat-list);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--panel-2);
 }
 
-.strat-tab button {
-  height: 24px;
-  max-width: 240px;
-  padding: 0 10px;
+.strat-list button {
+  padding: 8px 10px;
   background: transparent;
-  border: 0;
+  border: none;
+  border-radius: 5px;
   color: var(--muted);
   cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 11px;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
-.strat-tab.on {
-  background: var(--sel-dim);
-  border-color: var(--sel-bg);
-}
-
-.strat-tab.on button {
+.strat-list button:hover {
+  background: var(--sunken);
   color: var(--text);
 }
 
-.strat-tab .strat-x {
-  padding: 0 7px;
-  border-left: 1px solid var(--border);
-  font-size: 9px;
+.strat-list button.on {
+  background: var(--sel-bg);
+  color: #fff;
+  font-weight: 700;
 }
 
-.strat-tab .strat-x:hover {
-  color: var(--down);
+.strat-note {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .strat-body {
   flex: 1 1 auto;
-  min-height: 0;
+  min-width: 0;
+  min-height: 240px;
   overflow: auto;
   padding: 14px;
   text-align: center;
@@ -3554,10 +3554,11 @@ select {
 
 /*
  * SVGは viewBox だけで大きさを持たないことが多い。幅を与えないと 300px に潰れる。
- * 紙（inline-block）は中身に合わせて縮むので、% ではなく画面の幅から決める
+ * 紙（inline-block）は中身に合わせて縮むので、% ではなく画面の幅から決める。
+ * 312px = 窓の外側の余白40 + 一覧220 + 図の余白28 + 紙の余白24
  */
 .strat-sheet img.svg {
-  width: min(1040px, calc(100vw - 92px));
+  width: min(1048px, calc(100vw - 312px));
   max-height: none;
 }
 
@@ -3605,7 +3606,28 @@ select {
 .strat-err {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 14px 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
   color: var(--down);
   font-size: 11px;
+}
+
+/* 狭い画面では一覧を上に寄せて横に並べる */
+@media (max-width: 700px) {
+  .strat-main {
+    flex-direction: column;
+  }
+
+  .strat-list {
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: 120px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .strat-sheet img.svg {
+    width: calc(100vw - 92px);
+  }
 }

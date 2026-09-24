@@ -6,8 +6,29 @@ import { defineConfig, type Plugin } from 'vite'
 const DATA_DIR = join(process.cwd(), 'public', 'data')
 /** チャレンジの記録置き場。.csv 以外の名前なので再生用CSVの一覧には出ない */
 const LOG_DIR = join(DATA_DIR, 'challenges')
+/** 日報の置き場。1日 = 1フォルダで、本文 entry.md と画像を同じ場所に置く */
+const DIARY_DIR = join(DATA_DIR, 'diary')
+const DIARY_FILE = 'entry.md'
+/** 日報に添える画像の上限。スクリーンショットなら数MBで足りる */
+const MAX_IMAGE = 16 * 1024 * 1024
+/** 戦略の図（SVG/PNG/JPEG…）の置き場。git に入れるのでどの端末でも同じ一覧になる */
+const STRATEGY_DIR = join(DATA_DIR, 'strategy')
 /** 取り込むCSVの上限。歩み値1日分でも数MBなので十分 */
 const MAX_UPLOAD = 64 * 1024 * 1024
+
+/** 戦略の図として受け付ける拡張子と、返すときの Content-Type */
+const IMAGE_TYPES: Record<string, string> = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+}
+const imageExt = (name: string) => {
+  const m = /\.[^.]+$/.exec(name.toLowerCase())
+  return m && IMAGE_TYPES[m[0]] ? m[0] : null
+}
 
 /**
  * 危険な文字とディレクトリ移動を落として "○○.csv" だけ通す。
@@ -17,9 +38,9 @@ const MAX_UPLOAD = 64 * 1024 * 1024
 const NG_CHAR =
   /[^\w.\-\u3005-\u3007\u3041-\u309f\u30a0-\u30ff\u3400-\u9fff\uf900-\ufaff\u{20000}-\u{3134f}]/gu
 
-function safeName(raw: string): string | null {
+function safeName(raw: string, ok: (name: string) => boolean = (n) => n.endsWith('.csv')): string | null {
   const name = basename(decodeURIComponent(raw)).replace(NG_CHAR, '_')
-  if (!name || name.startsWith('.') || !name.toLowerCase().endsWith('.csv')) return null
+  if (!name || name.startsWith('.') || !ok(name.toLowerCase())) return null
   return name
 }
 
@@ -27,8 +48,8 @@ function safeName(raw: string): string | null {
  * 実ファイル名を引き当てる。ブラウザからはNFCで来ることがあり、
  * NFDで置かれている実体とは字面が違う。見つからなければそのまま返す（新規保存用）。
  */
-async function realName(name: string): Promise<string> {
-  const names = await readdir(DATA_DIR).catch(() => [] as string[])
+async function realName(name: string, dir = DATA_DIR): Promise<string> {
+  const names = await readdir(dir).catch(() => [] as string[])
   const want = name.normalize('NFC')
   return names.find((n) => n.normalize('NFC') === want) ?? name
 }
@@ -108,6 +129,89 @@ function dataFilesApi(): Plugin {
             realName(name)
               .then(async (real) => {
                 const target = join(DATA_DIR, real)
+                // 同名で中身も同じなら書き直さない
+                const same = await readFile(target)
+                  .then((cur) => cur.equals(body))
+                  .catch(() => false)
+                if (!same) await writeFile(target, body)
+                send(200, { name: real, saved: !same })
+              })
+              .catch((e) => send(500, { error: String(e) }))
+          })
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
+
+/**
+ * 戦略の図を一覧・取得・保存するAPI。置き場は public/data/strategy。
+ * 図は git に入れて端末間で同期するので、ブラウザではなくここに保存する。
+ */
+function strategyApi(): Plugin {
+  return {
+    name: 'strategy-api',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/api/strategy', (req, res, next) => {
+        const send = (code: number, body: unknown) => {
+          res.statusCode = code
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify(body))
+        }
+        const path = (req.url ?? '/').split('?')[0]
+
+        if (req.method === 'GET' && (path === '/' || path === '')) {
+          readdir(STRATEGY_DIR)
+            .catch(() => [] as string[])
+            .then((names) => send(200, { files: names.filter((n) => !n.startsWith('.') && imageExt(n)).sort() }))
+          return
+        }
+
+        if (req.method === 'GET' && path.startsWith('/file/')) {
+          const name = safeName(path.slice('/file/'.length), (n) => !!imageExt(n))
+          if (!name) return send(400, { error: '画像ファイル名が不正です' })
+          realName(name, STRATEGY_DIR)
+            .then((real) => readFile(join(STRATEGY_DIR, real)))
+            .then(
+              (buf) => {
+                res.statusCode = 200
+                res.setHeader('Content-Type', IMAGE_TYPES[imageExt(name)!])
+                res.setHeader('Cache-Control', 'no-store')
+                res.end(buf)
+              },
+              () => send(404, { error: `${name} がありません` }),
+            )
+          return
+        }
+
+        if (req.method === 'PUT') {
+          const name = safeName(path.replace(/^\//, ''), (n) => !!imageExt(n))
+          if (!name) return send(400, { error: 'SVG・PNG・JPEG・GIF・WebP だけ置けます' })
+
+          const chunks: Buffer[] = []
+          let size = 0
+          let aborted = false
+          req.on('data', (c: Buffer) => {
+            size += c.length
+            if (size > MAX_UPLOAD) {
+              aborted = true
+              send(413, { error: 'ファイルが大きすぎます' })
+              req.destroy()
+              return
+            }
+            chunks.push(c)
+          })
+          req.on('end', () => {
+            if (aborted) return
+            const body = Buffer.concat(chunks)
+            mkdir(STRATEGY_DIR, { recursive: true })
+              .then(() => realName(name, STRATEGY_DIR))
+              .then(async (real) => {
+                const target = join(STRATEGY_DIR, real)
                 // 同名で中身も同じなら書き直さない
                 const same = await readFile(target)
                   .then((cur) => cur.equals(body))
@@ -253,7 +357,7 @@ function challengeApi(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), dataFilesApi(), challengeApi()],
+  plugins: [react(), dataFilesApi(), strategyApi(), challengeApi()],
   server: {
     // public/data への保存でページ全体がリロードされると再生位置が飛ぶので監視から外す
     watch: { ignored: ['**/public/data/**'] },

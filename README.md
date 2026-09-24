@@ -36,6 +36,7 @@ npm run dev     # http://localhost:5173/
 | 音 | BGM / 値動き / 約定 を種類ごとに切替（いずれも既定でオン） |
 | BGM | 再生中に流れ、チャレンジ中は編成が変わる。記録の切り忘れに耳で気づける |
 | 説明 | 右下の「説明」から各機能の解説。図つきで株がはじめてでも読める |
+| 戦略 | 右上の「戦略」で `public/data/strategy` の図を一覧から選んで表示。新しい図はここから追加すると同じ場所に保存される |
 | 解説チップ | チャレンジ / 分析 / 総合 / ルール / ゴースト / お題 にカーソルを0.5秒重ねると解説が出る |
 | 対戦 | 3体のbotと同じ相場・同じ約定ルールで損益を競う。10 / 30 / 60分のラウンド制 |
 | 配色 | midnight / spring などの無地に、super mario / doraemon / sunset drive など柄物も。チャートも板も同時に切り替わる |
@@ -90,6 +91,7 @@ src/
   components/RulePanel.tsx    マイルール（移動・リサイズできる浮きパネル）
   components/DailyCard.tsx    今日のお題
   components/Help.tsx         機能の説明（図はすべてインラインSVG）
+  components/Strategy.tsx     戦略の図（public/data/strategy の一覧・表示・追加）
   components/Hint.tsx         ボタンに0.5秒ホバーで出る解説チップ
   components/Match.tsx        対戦の設定・スコアボード・決着画面（移動・リサイズ可）
   components/BotBoard.tsx     botごとのミニチャートと売買明細（移動・リサイズ・折りたたみ可）
@@ -170,6 +172,20 @@ RSIだけは前の足の平均損益を引き継ぐ再帰計算なので、**確
 - 保存でページ全体がリロードされて再生位置が飛ばないよう、`server.watch.ignored` で `public/data` を監視から外している
 - `npm run build` した成果物にはAPIは含まれない。その場合は `public/data` の静的配信に自動で落ちるので、
   ビルド時点で置いてあるCSVは読める（取り込みと一覧は使えない）
+
+### 戦略の図
+
+右上の「戦略」で開く。図は `public/data/strategy/` に置いた画像（SVG・PNG・JPEG・GIF・WebP）を一覧に出し、
+選ぶと白い紙の上に載せて表示する（戦略図は黒文字が多く、暗い配色にそのまま置くと読めないため）。
+「画像を追加」かドロップで新しい図を同じ場所に保存でき、git に入るのでどの端末でも同じ一覧になる。
+
+| メソッド | パス | 用途 |
+|---|---|---|
+| GET | `/api/strategy` | `public/data/strategy` 内の画像一覧 |
+| GET | `/api/strategy/file/<name>` | 画像そのもの |
+| PUT | `/api/strategy/<name>` | 画像を保存（同名で同一内容なら書き直さない） |
+
+図を消すAPIは無い。外したいときはフォルダから直接消す。
 
 なお 200本MA のように期間の長い指標は、その本数だけ足が溜まるまで線が出ない。
 1秒足の200本MA は約定の詰まり具合次第で数分ぶんの再生が必要になる。
